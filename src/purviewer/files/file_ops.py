@@ -387,14 +387,21 @@ class FileOperations(AuditAnalyzer):
         # Mass operations summary
         has_suspicious_activity = False
 
+        # Map operation types to their config key names
+        operation_key_map = {
+            "Download": "mass_downloads",
+            "Delete": "mass_deletions",
+        }
+
         for operation_type in ["Download", "Delete"]:
             bulk_ops = file_actions[
                 file_actions["Operation"].str.contains(operation_type, na=False)
             ]
             if not bulk_ops.empty:
                 user_counts = bulk_ops.groupby("UserId").size()
+                config_key = operation_key_map[operation_type]
                 suspicious = user_counts[
-                    user_counts >= int(self.suspicious_patterns[f"mass_{operation_type.lower()}s"])
+                    user_counts >= int(self.suspicious_patterns[config_key])
                 ]
                 if not suspicious.empty:
                     if not has_suspicious_activity:
