@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Redis service for session and file cache management
+  redis:
+    image: redis:7-alpine
+    container_name: purviewer-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - purviewer-network
+    restart: unless-stopped
+
+  # Purviewer Flask web application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: purviewer-web
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_FOLDER=/tmp/purviewer
+      - MAX_FILE_SIZE=500
+      - SECRET_KEY=your-super-secret-key-change-in-production
+    volumes:
+      - ./logs:/app/logs
+      - purviewer_temp:/tmp/purviewer
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - purviewer-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  purviewer_temp:
+    driver: local
+
+networks:
+  purviewer-network:
+    driver: bridge

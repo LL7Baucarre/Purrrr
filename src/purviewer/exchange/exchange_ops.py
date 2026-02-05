@@ -780,6 +780,18 @@ class ExchangeOperations(AuditAnalyzer):
             # For rule operations
             elif "InboxRule" in operation:
                 subject = self._extract_rule_details(audit_data)
+            # For update operations
+            elif operation == "Update":
+                subject = self._extract_update_details(audit_data)
+            # For mail access operations
+            elif operation == "MailItemsAccessed":
+                subject = self._extract_mail_access_details(audit_data)
+            # For move operations
+            elif operation == "MoveToDeletedItems":
+                subject = self._extract_move_details(audit_data)
+            # For other operations with parameters
+            else:
+                subject = self._extract_generic_operation_details(audit_data, operation)
 
         # For folder access events
         if subject and "items in " in subject:
@@ -791,27 +803,255 @@ class ExchangeOperations(AuditAnalyzer):
 
     def _extract_rule_details(self, audit_data: dict[str, Any]) -> str:
         """Extract and format details for inbox rule operations."""
-        subject = "Inbox Rule Configuration"
+        if "Parameters" not in audit_data:
+            return "Inbox Rule Configuration"
 
+        parameters = audit_data.get("Parameters", [])
+        rule_details = self._parse_rule_parameters(parameters)
+        
+        if not rule_details:
+            return "Inbox Rule Configuration"
+
+        # Format the main details
+        details_parts = []
+        
+        # Rule name
+        if rule_details.get("Name"):
+            details_parts.append(f"Règle: '{rule_details['Name']}'")
+            
+        # Conditions
+        conditions = []
+        if rule_details.get("From"):
+            conditions.append(f"De: {rule_details['From']}")
+        if rule_details.get("SubjectContainsWords"):
+            conditions.append(f"Sujet contient: {rule_details['SubjectContainsWords']}")
+        if rule_details.get("BodyContainsWords"):
+            conditions.append(f"Corps contient: {rule_details['BodyContainsWords']}")
+        if rule_details.get("SentTo"):
+            conditions.append(f"Envoyé à: {rule_details['SentTo']}")
+            
+        if conditions:
+            details_parts.append(f"Conditions: {' ET '.join(conditions)}")
+            
+        # Actions
+        actions = []
+        if rule_details.get("DeleteMessage") == "True":
+            actions.append("Supprimer le message")
+        if rule_details.get("MoveToFolder"):
+            actions.append(f"Déplacer vers: {rule_details['MoveToFolder']}")
+        if rule_details.get("MarkAsRead") == "True":
+            actions.append("Marquer comme lu")
+        if rule_details.get("ForwardTo"):
+            actions.append(f"Transférer à: {rule_details['ForwardTo']}")
+        if rule_details.get("RedirectTo"):
+            actions.append(f"Rediriger vers: {rule_details['RedirectTo']}")
+        if rule_details.get("StopProcessingRules") == "True":
+            actions.append("Arrêter le traitement des règles")
+            
+        if actions:
+            details_parts.append(f"Actions: {'; '.join(actions)}")
+
+        return " | ".join(details_parts) if details_parts else "Inbox Rule Configuration"
+
+    def _parse_rule_parameters(self, parameters: list) -> dict[str, str]:
+        """Parse rule parameters into a structured dictionary."""
+        rule_details = {}
+        
+        for param in parameters:
+            if isinstance(param, dict):
+                name = param.get("Name", "")
+                value = param.get("Value", "")
+                if name and value:
+                    rule_details[name] = value
+                    
+        return rule_details
+
+    def _extract_update_details(self, audit_data: dict[str, Any]) -> str:
+        """Extract and format details for Update operations."""
+        details_parts = []
+        
+        # Get item information
+        if "Item" in audit_data:
+            item = audit_data["Item"]
+            if "Subject" in item:
+                details_parts.append(f"Élément: '{item['Subject']}'")
+            if "ParentFolder" in item and "Path" in item["ParentFolder"]:
+                folder_path = item["ParentFolder"]["Path"].replace("\\", "/")
+                details_parts.append(f"Dossier: {folder_path}")
+            if "SizeInBytes" in item:
+                size_kb = round(int(item["SizeInBytes"]) / 1024, 1)
+                details_parts.append(f"Taille: {size_kb} KB")
+            if "Attachments" in item:
+                att_info = item["Attachments"]
+                if att_info and att_info != " (0b)":
+                    details_parts.append(f"Pièces jointes: {att_info}")
+        
+        # Get modified properties
+        if "ModifiedProperties" in audit_data:
+            props = audit_data["ModifiedProperties"]
+            if props:
+                prop_labels = {
+                    "RecipientCollection": "Destinataires",
+                    "AllAttachmentsHidden": "Pièces jointes",
+                    "ItemClass": "Type d'élément",
+                    "Subject": "Sujet",
+                    "Body": "Corps du message"
+                }
+                formatted_props = [prop_labels.get(prop, prop) for prop in props]
+                details_parts.append(f"Modifié: {', '.join(formatted_props)}")
+        
+        return " | ".join(details_parts) if details_parts else "Mise à jour d'élément"
+
+    def _extract_mail_access_details(self, audit_data: dict[str, Any]) -> str:
+        """Extract and format details for MailItemsAccessed operations."""
+        details_parts = []
+        
+        # Get operation properties
+        if "OperationProperties" in audit_data:
+            for prop in audit_data["OperationProperties"]:
+                if prop.get("Name") == "MailAccessType":
+                    access_type = prop.get("Value", "")
+                    access_labels = {
+                        "Bind": "Consultation",
+                        "Sync": "Synchronisation",
+                        "Search": "Recherche"
+                    }
+                    details_parts.append(f"Type: {access_labels.get(access_type, access_type)}")
+        
+        # Count folders and items
+        folder_count = 0
+        item_count = 0
+        folders_info = []
+        
+        if "Folders" in audit_data:
+            folders = audit_data["Folders"]
+            folder_count = len(folders)
+            
+            for folder in folders:
+                folder_path = folder.get("Path", "Inconnu").replace("\\", "/")
+                folder_items = folder.get("FolderItems", [])
+                item_count += len(folder_items)
+                
+                if folder_items:
+                    # Show some example subjects
+                    subjects = [item.get("Subject", "[Sans sujet]")[:30] for item in folder_items[:2]]
+                    folder_info = f"{folder_path} ({len(folder_items)} éléments)"
+                    if len(folders) <= 2:  # Only show details for few folders
+                        folder_info += f": {', '.join(subjects)}"
+                    folders_info.append(folder_info)
+                else:
+                    folders_info.append(f"{folder_path} (vide)")
+        
+        # Single item access
+        elif "Item" in audit_data:
+            item = audit_data["Item"]
+            if "ParentFolder" in item and "Name" in item["ParentFolder"]:
+                folder_name = item["ParentFolder"]["Name"]
+                details_parts.append(f"Dossier: {folder_name}")
+            item_count = 1
+        
+        # Add summary
+        if folder_count > 0:
+            details_parts.append(f"Dossiers: {folder_count}")
+        if item_count > 0:
+            details_parts.append(f"Éléments: {item_count}")
+        
+        # Add folder details for small numbers
+        if len(folders_info) <= 3:
+            details_parts.extend(folders_info)
+        elif folders_info:
+            details_parts.append(f"Détails: {folders_info[0]} et {len(folders_info)-1} autres")
+        
+        return " | ".join(details_parts) if details_parts else "Accès aux messages"
+
+    def _extract_move_details(self, audit_data: dict[str, Any]) -> str:
+        """Extract and format details for MoveToDeletedItems operations."""
+        details_parts = []
+        
+        # Get affected items
+        if "AffectedItems" in audit_data:
+            items = audit_data["AffectedItems"]
+            if items:
+                item_count = len(items)
+                details_parts.append(f"Éléments supprimés: {item_count}")
+                
+                # Show subjects of first few items
+                subjects = []
+                for item in items[:3]:
+                    if "Subject" in item:
+                        subject = item["Subject"][:30]
+                        subjects.append(f"'{subject}'")
+                
+                if subjects:
+                    details_parts.append(f"Sujets: {', '.join(subjects)}")
+        
+        # Get source and destination folders
+        if "Folder" in audit_data and "Path" in audit_data["Folder"]:
+            source = audit_data["Folder"]["Path"].replace("\\", "/")
+            details_parts.append(f"Depuis: {source}")
+        
+        if "DestFolder" in audit_data and "Path" in audit_data["DestFolder"]:
+            dest = audit_data["DestFolder"]["Path"].replace("\\", "/")
+            details_parts.append(f"Vers: {dest}")
+        
+        return " | ".join(details_parts) if details_parts else "Suppression d'éléments"
+
+    def _extract_generic_operation_details(self, audit_data: dict[str, Any], operation: str) -> str:
+        """Extract details for other operation types."""
+        details_parts = []
+        
+        # Operation-specific labels
+        operation_labels = {
+            "Send": "Envoi de message",
+            "Create": "Création d'élément",
+            "Copy": "Copie d'élément",
+            "Move": "Déplacement",
+            "HardDelete": "Suppression définitive",
+            "SoftDelete": "Suppression temporaire",
+            "AddFolderPermissions": "Ajout de permissions",
+            "RemoveFolderPermissions": "Suppression de permissions",
+            "UpdateFolderPermissions": "Modification de permissions",
+            "MessageBind": "Liaison de message"
+        }
+        
+        base_label = operation_labels.get(operation, operation)
+        
+        # Get item information if available
+        if "Item" in audit_data:
+            item = audit_data["Item"]
+            if "Subject" in item:
+                details_parts.append(f"'{item['Subject'][:30]}'")
+            elif "ParentFolder" in item and "Path" in item["ParentFolder"]:
+                folder_path = item["ParentFolder"]["Path"].replace("\\", "/")
+                details_parts.append(f"Dossier: {folder_path}")
+        
+        # Get affected items count
+        if "AffectedItems" in audit_data:
+            items = audit_data["AffectedItems"]
+            if items:
+                details_parts.append(f"{len(items)} élément(s)")
+        
+        # Get folder information
+        if "Folder" in audit_data and "Path" in audit_data["Folder"]:
+            folder_path = audit_data["Folder"]["Path"].replace("\\", "/")
+            details_parts.append(f"Dans: {folder_path}")
+        
+        # For operations with parameters
         if "Parameters" in audit_data:
-            parameters = audit_data.get("Parameters", [])
-            param_details = []
-
-            for param in parameters:
-                if isinstance(param, dict):
-                    name = param.get("Name", "")
-                    value = param.get("Value", "")
-                    if name and value:
-                        param_details.append(f"{name}: {value}")
-
-            if param_details:
-                subject += (
-                    f" ({'; '.join(param_details[:2])}...)"
-                    if len(param_details) > 2
-                    else f" ({'; '.join(param_details)})"
-                )
-
-        return subject
+            params = audit_data["Parameters"]
+            if len(params) <= 3:  # Show details for simple operations
+                param_info = []
+                for param in params[:3]:
+                    if isinstance(param, dict):
+                        name = param.get("Name", "")
+                        value = param.get("Value", "")
+                        if name and value and len(value) < 50:
+                            param_info.append(f"{name}: {value}")
+                if param_info:
+                    details_parts.append(" | ".join(param_info))
+        
+        final_detail = " | ".join(details_parts) if details_parts else ""
+        return f"{base_label}{' | ' + final_detail if final_detail else ''}"
 
     def _print_table_row(
         self,
@@ -976,13 +1216,35 @@ class ExchangeOperations(AuditAnalyzer):
         csv_row["Client IP"] = audit_data.get("ClientIPAddress", csv_row["Client IP"])
         csv_row["Client Info"] = audit_data.get("ClientInfoString", csv_row["Client Info"])
 
-        # Handle different operation types
-        if "Item" in audit_data and isinstance(audit_data["Item"], dict):
-            self._extract_item_details_for_csv(audit_data["Item"], csv_row)
+        # Use detailed parsing functions for different operation types
+        if "InboxRule" in operation:
+            detailed_subject = self._extract_rule_details(audit_data)
+            csv_row["Subject"] = detailed_subject
+            self._extract_rule_details_for_csv(audit_data, csv_row)
+        elif operation == "Update":
+            detailed_subject = self._extract_update_details(audit_data)
+            csv_row["Subject"] = detailed_subject
+            self._extract_update_details_for_csv(audit_data, csv_row)
+        elif operation == "MailItemsAccessed":
+            detailed_subject = self._extract_mail_access_details(audit_data)
+            csv_row["Subject"] = detailed_subject
+            self._extract_mail_access_details_for_csv(audit_data, csv_row)
+        elif operation == "MoveToDeletedItems":
+            detailed_subject = self._extract_move_details(audit_data)
+            csv_row["Subject"] = detailed_subject
+            self._extract_move_details_for_csv(audit_data, csv_row)
         elif operation == "SearchQueryInitiated":
             self._extract_search_details(audit_data, csv_row)
-        elif "InboxRule" in operation:
-            self._extract_rule_details_for_csv(audit_data, csv_row)
+        elif "Item" in audit_data and isinstance(audit_data["Item"], dict):
+            self._extract_item_details_for_csv(audit_data["Item"], csv_row)
+            # Use generic parsing for other operations
+            detailed_subject = self._extract_generic_operation_details(audit_data, operation)
+            csv_row["Subject"] = detailed_subject
+        else:
+            # Use generic parsing for unknown operations
+            detailed_subject = self._extract_generic_operation_details(audit_data, operation)
+            csv_row["Subject"] = detailed_subject
+            self._extract_generic_operation_details_for_csv(audit_data, operation, csv_row)
 
         # Process folder access events
         if "items in " in csv_row["Subject"]:
@@ -1020,23 +1282,147 @@ class ExchangeOperations(AuditAnalyzer):
         self, audit_data: dict[str, Any], csv_row: dict[str, str]
     ) -> None:
         """Extract details from a rule operation and update the CSV row."""
-        csv_row["Subject"] = "Inbox Rule Configuration"
-
         if "Parameters" not in audit_data:
+            csv_row["Subject"] = "Inbox Rule Configuration"
             return
 
         parameters = audit_data.get("Parameters", [])
-        param_details = []
+        rule_details = self._parse_rule_parameters(parameters)
+        
+        if not rule_details:
+            csv_row["Subject"] = "Inbox Rule Configuration"
+            return
 
-        for param in parameters:
-            if isinstance(param, dict):
-                name = param.get("Name", "")
-                value = param.get("Value", "")
-                if name and value:
-                    param_details.append(f"{name}: {value}")
+        # Create detailed description for CSV
+        details_parts = []
+        
+        # Rule name
+        if rule_details.get("Name"):
+            details_parts.append(f"Règle: '{rule_details['Name']}'")
+            
+        # Conditions summary
+        condition_count = 0
+        for condition_key in ["From", "SubjectContainsWords", "BodyContainsWords", "SentTo"]:
+            if rule_details.get(condition_key):
+                condition_count += 1
+                
+        if condition_count > 0:
+            details_parts.append(f"Conditions: {condition_count} définie(s)")
+            
+        # Actions summary
+        action_count = 0
+        for action_key in ["DeleteMessage", "MoveToFolder", "MarkAsRead", "ForwardTo", "RedirectTo"]:
+            if rule_details.get(action_key):
+                action_count += 1
+                
+        if action_count > 0:
+            details_parts.append(f"Actions: {action_count} définie(s)")
 
-        if param_details:
-            csv_row["Subject"] += f" ({'; '.join(param_details)})"
+        csv_row["Subject"] = " | ".join(details_parts) if details_parts else "Inbox Rule Configuration"
+        
+        # Add detailed information in the folder field for CSV
+        detailed_info = []
+        
+        # Conditions details
+        if rule_details.get("From"):
+            detailed_info.append(f"De: {rule_details['From']}")
+        if rule_details.get("SubjectContainsWords"):
+            detailed_info.append(f"Sujet: {rule_details['SubjectContainsWords']}")
+            
+        # Actions details
+        if rule_details.get("DeleteMessage") == "True":
+            detailed_info.append("Action: Supprimer")
+        if rule_details.get("MoveToFolder"):
+            detailed_info.append(f"Action: Déplacer vers {rule_details['MoveToFolder']}")
+            
+        if detailed_info:
+            csv_row["Folder"] = " | ".join(detailed_info)
+
+    def _extract_update_details_for_csv(self, audit_data: dict[str, Any], csv_row: dict[str, str]) -> None:
+        """Extract details from an Update operation for CSV."""
+        if "Item" in audit_data:
+            item = audit_data["Item"]
+            if not csv_row["Subject"] and "Subject" in item:
+                csv_row["Subject"] = f"Mise à jour: {item['Subject']}"
+            if "ParentFolder" in item and "Path" in item["ParentFolder"]:
+                csv_row["Folder"] = item["ParentFolder"]["Path"].replace("\\", "/")
+            if "InternetMessageId" in item:
+                csv_row["Message ID"] = item["InternetMessageId"]
+            if "Attachments" in item:
+                csv_row["Attachments"] = item["Attachments"]
+
+    def _extract_mail_access_details_for_csv(self, audit_data: dict[str, Any], csv_row: dict[str, str]) -> None:
+        """Extract details from a MailItemsAccessed operation for CSV."""
+        # Count items and folders
+        folder_count = 0
+        item_count = 0
+        
+        if "Folders" in audit_data:
+            folders = audit_data["Folders"]
+            folder_count = len(folders)
+            for folder in folders:
+                folder_items = folder.get("FolderItems", [])
+                item_count += len(folder_items)
+                
+            # Use first folder path as primary folder
+            if folders and "Path" in folders[0]:
+                csv_row["Folder"] = folders[0]["Path"].replace("\\", "/")
+                
+        elif "Item" in audit_data:
+            item = audit_data["Item"]
+            if "ParentFolder" in item and "Path" in item["ParentFolder"]:
+                csv_row["Folder"] = item["ParentFolder"]["Path"].replace("\\", "/")
+            item_count = 1
+            
+        # Update subject if not already set by detailed parsing
+        if not csv_row["Subject"]:
+            access_type = "Consultation"
+            if "OperationProperties" in audit_data:
+                for prop in audit_data["OperationProperties"]:
+                    if prop.get("Name") == "MailAccessType":
+                        access_type = prop.get("Value", "Consultation")
+                        break
+            csv_row["Subject"] = f"Accès aux messages ({access_type})"
+
+    def _extract_move_details_for_csv(self, audit_data: dict[str, Any], csv_row: dict[str, str]) -> None:
+        """Extract details from a MoveToDeletedItems operation for CSV."""
+        if "AffectedItems" in audit_data and audit_data["AffectedItems"]:
+            first_item = audit_data["AffectedItems"][0]
+            if "Subject" in first_item:
+                csv_row["Subject"] = f"Suppression: {first_item['Subject']}"
+            if "InternetMessageId" in first_item:
+                csv_row["Message ID"] = first_item["InternetMessageId"]
+                
+        if "Folder" in audit_data and "Path" in audit_data["Folder"]:
+            csv_row["Folder"] = audit_data["Folder"]["Path"].replace("\\", "/")
+
+    def _extract_generic_operation_details_for_csv(self, audit_data: dict[str, Any], operation: str, csv_row: dict[str, str]) -> None:
+        """Extract details from generic operations for CSV."""
+        # Try to get basic item information
+        if "Item" in audit_data:
+            item = audit_data["Item"]
+            if "Subject" in item and not csv_row["Subject"]:
+                csv_row["Subject"] = item["Subject"]
+            if "ParentFolder" in item and "Path" in item["ParentFolder"]:
+                csv_row["Folder"] = item["ParentFolder"]["Path"].replace("\\", "/")
+            if "InternetMessageId" in item:
+                csv_row["Message ID"] = item["InternetMessageId"]
+                
+        # Try to get folder information
+        elif "Folder" in audit_data and "Path" in audit_data["Folder"]:
+            csv_row["Folder"] = audit_data["Folder"]["Path"].replace("\\", "/")
+            
+        # If still no subject, use operation name
+        if not csv_row["Subject"]:
+            operation_labels = {
+                "Send": "Envoi de message",
+                "Create": "Création d'élément",
+                "Copy": "Copie d'élément",
+                "Move": "Déplacement",
+                "HardDelete": "Suppression définitive",
+                "SoftDelete": "Suppression temporaire"
+            }
+            csv_row["Subject"] = operation_labels.get(operation, operation)
 
     def _prepare_mail_item_csv_row(
         self, timestamp: str, user: str, operation: str, row: Series
