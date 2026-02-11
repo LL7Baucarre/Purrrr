@@ -34,14 +34,18 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - FLASK_ENV=production
+      - FLASK_ENV=development
+      - DEBUG=1
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_FOLDER=/tmp/purrrr
       - MAX_FILE_SIZE=500
       - SECRET_KEY=your-super-secret-key-change-in-production
     volumes:
-      - ./logs:/app/logs
-      - ./ip-to-country.csv:/app/ip-to-country.csv
+      - ./src:/app/src:rw
+      - ./run_web.py:/app/run_web.py:rw
+      - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:rw
+      - ./logs:/app/logs:rw
+      - ./ip-to-country.csv:/app/ip-to-country.csv:ro
       - purrrr_temp:/tmp/purrrr
     depends_on:
       redis:

@@ -117,11 +117,21 @@ class AnalysisSession:
 # Global session storage (in production, use proper session management)
 sessions: dict[str, AnalysisSession] = {}
 
-# Pre-load databases at startup
-logger.info("Pre-loading geolocation and ASN databases...")
-get_geolocation_db()
-get_asn_db()
-logger.info("Databases loaded successfully")
+# Database pre-loading is done in run_flask_app() to avoid
+# double-loading when Flask's debug reloader forks the process.
+_databases_preloaded = False
+
+
+def _preload_databases() -> None:
+    """Pre-load geolocation and ASN databases (called once at startup)."""
+    global _databases_preloaded
+    if _databases_preloaded:
+        return
+    logger.info("Pre-loading geolocation and ASN databases...")
+    get_geolocation_db()
+    get_asn_db()
+    logger.info("Databases loaded successfully")
+    _databases_preloaded = True
 
 
 @app.route("/")
@@ -1219,7 +1229,19 @@ def internal_error(error: Any) -> tuple[dict[str, str], int]:
 
 def run_flask_app(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -> None:
     """Run the Flask application."""
-    app.run(host=host, port=port, debug=debug, threaded=True)
+    # Pre-load databases before starting the server.
+    # In debug mode with the reloader, only load in the child process
+    # (WERKZEUG_RUN_MAIN is set) to avoid loading twice.
+    if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        _preload_databases()
+
+    app.run(
+        host=host,
+        port=port,
+        debug=debug,
+        threaded=True,
+        exclude_patterns=["*.csv", "*.log", "*/logs/*", "*/data/*"],
+    )
 
 
 if __name__ == "__main__":

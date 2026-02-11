@@ -43,4 +43,9 @@ echo "   Access: http://0.0.0.0:5000"
 echo "   Max file size: ${MAX_FILE_SIZE:-500}MB"
 echo ""
 
-exec python run_web.py --host 0.0.0.0 --port 5000
+if [ "${DEBUG:-}" = "1" ] || [ "${DEBUG:-}" = "true" ]; then
+    echo "Debug mode enabled: starting with reloader"
+    exec python run_web.py --host 0.0.0.0 --port 5000 --debug
+else
+    exec python run_web.py --host 0.0.0.0 --port 5000
+fi

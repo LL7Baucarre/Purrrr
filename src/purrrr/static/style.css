@@ -781,6 +781,33 @@ footer {
     border-radius: 0.25rem;
 }
 
+/* Custom badge color for Teams (purple) */
+.badge.bg-purple {
+    background-color: #6f42c1 !important;
+    color: white;
+}
+
+/* Workload-specific modal header colors */
+.modal-header.workload-exchange { background-color: #0d6efd !important; }
+.modal-header.workload-sharepoint { background-color: #198754 !important; }
+.modal-header.workload-onedrive { background-color: #0dcaf0 !important; }
+.modal-header.workload-entra { background-color: #ffc107 !important; color: #212529 !important; }
+.modal-header.workload-teams { background-color: #6f42c1 !important; }
+.modal-header.workload-security { background-color: #dc3545 !important; }
+
+/* Improved info-section for multi-workload */
+.info-section .json-subsection {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 12px;
+    margin-top: 8px;
+}
+
+.info-section .json-subsection h6 {
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+}
+
 /* Dashboard Progress Container */
 #dashboard-progress-container {
     animation: fadeIn 0.3s ease-in;

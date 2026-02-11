@@ -563,6 +563,10 @@
                 <!-- Quick Info Banner -->
                 <div class="bg-light border-bottom px-4 py-3" id="quick-info-banner">
                     <div class="row g-3">
+                        <div class="col-md-2">
+                            <div class="text-muted small">Workload</div>
+                            <div class="fw-bold" id="quick-workload"></div>
+                        </div>
                         <div class="col-md-3">
                             <div class="text-muted small">Opération</div>
                             <div class="fw-bold text-truncate" id="quick-operation"></div>
@@ -571,11 +575,11 @@
                             <div class="text-muted small">Utilisateur</div>
                             <div class="fw-bold text-truncate" id="quick-user"></div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="text-muted small">Date/Heure</div>
                             <div class="fw-bold text-truncate" id="quick-date"></div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="text-muted small">Statut</div>
                             <div class="fw-bold" id="quick-status"></div>
                         </div>
@@ -725,12 +729,7 @@
                 width: '100%'
             });
             
-            $('#filter-actions').select2({
-                theme: 'bootstrap-5',
-                placeholder: 'Sélectionner les actions',
-                allowClear: true,
-                width: '100%'
-            });
+            // filter-actions Select2 is initialized in app.js setupEventListeners()
         });
     </script>
 </body>

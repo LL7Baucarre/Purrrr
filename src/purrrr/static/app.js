@@ -22,17 +22,20 @@ const AVAILABLE_COLUMNS = [
     { key: 'as_name', label: 'Nom AS', visible: false, width: '15%' }
 ];
 
-// DOM Elements
-const uploadForm = document.getElementById('upload-form');
-const uploadSection = document.getElementById('upload-section');
-const dashboardSection = document.getElementById('dashboard-section');
-const csvFileInput = document.getElementById('csv-file');
-const submitBtn = document.getElementById('submit-btn');
-const resetBtn = document.getElementById('reset-btn');
-const navbarStatus = document.getElementById('navbar-status');
+// DOM Elements (initialized in DOMContentLoaded)
+let uploadForm, uploadSection, dashboardSection, csvFileInput, submitBtn, resetBtn, navbarStatus;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Initialize DOM references now that the DOM is ready
+    uploadForm = document.getElementById('upload-form');
+    uploadSection = document.getElementById('upload-section');
+    dashboardSection = document.getElementById('dashboard-section');
+    csvFileInput = document.getElementById('csv-file');
+    submitBtn = document.getElementById('submit-btn');
+    resetBtn = document.getElementById('reset-btn');
+    navbarStatus = document.getElementById('navbar-status');
+
     setupEventListeners();
     initializeColumnSelectors();
     initializeDatabaseLoading();
@@ -86,13 +89,19 @@ async function initializeDatabaseLoading() {
 }
 
 function setupEventListeners() {
-    uploadForm.addEventListener('submit', handleFileUpload);
-    resetBtn.addEventListener('click', resetAnalysis);
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', handleFileUpload);
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetAnalysis);
+    }
     
     // File input listeners
-    csvFileInput.addEventListener('change', function () {
-        updateFileInputStatus('csv-check', this.value);
-    });
+    if (csvFileInput) {
+        csvFileInput.addEventListener('change', function () {
+            updateFileInputStatus('csv-check', this.value);
+        });
+    }
 
     // GeoIP download button
     const downloadGeoIPBtn = document.getElementById('download-geoip-btn');
@@ -160,6 +169,19 @@ function setupEventListeners() {
         compactViewCheckbox.addEventListener('change', toggleCompactView);
     }
     
+    // Initialize Select2 for actions filter
+    const filterActionsSelect = document.getElementById('filter-actions');
+    if (filterActionsSelect) {
+        $(filterActionsSelect).select2({
+            theme: 'bootstrap-5',
+            placeholder: "Sélectionner des actions",
+            allowClear: true,
+            width: '100%'
+        });
+        // Apply filters when action selection changes (select2 event)
+        $(filterActionsSelect).on('select2:select select2:unselect select2:clearing', applyFilters);
+    }
+
     // Initialize Select2 for country filter
     const filterCountrySelect = document.getElementById('filter-country');
     if (filterCountrySelect) {
@@ -274,9 +296,10 @@ function getColumnValue(op, colKey) {
 }
 
 function getFiltersFromUI() {
-    // Get multi-select values as arrays
+    // Get multi-select values as arrays (Select2 compatible)
     const userValues = Array.from(document.getElementById('filter-user')?.selectedOptions || []).map(opt => opt.value).filter(v => v);
-    const actionValues = Array.from(document.getElementById('filter-actions')?.selectedOptions || []).map(opt => opt.value).filter(v => v);
+    const actionsVal = $('#filter-actions').val();
+    const actionValues = Array.isArray(actionsVal) ? actionsVal : (actionsVal ? [actionsVal] : []);
     
     return {
         user: userValues,
@@ -343,7 +366,8 @@ function applyFilters() {
     // Get multi-select values as arrays (Select2 compatible)
     const filterWorkloadValues = Array.from(document.getElementById('filter-workload')?.selectedOptions || []).map(opt => opt.value).filter(v => v);
     const filterUserValues = Array.from(document.getElementById('filter-user')?.selectedOptions || []).map(opt => opt.value).filter(v => v);
-    const filterActionsValues = Array.from(document.getElementById('filter-actions')?.selectedOptions || []).map(opt => opt.value).filter(v => v);
+    const actionsVal = $('#filter-actions').val();
+    const filterActionsValues = Array.isArray(actionsVal) ? actionsVal : (actionsVal ? [actionsVal] : []);
     const countryVal = $('#filter-country').val();
     const filterCountryValues = Array.isArray(countryVal) ? countryVal : (countryVal ? [countryVal] : []);
     const asnVal = $('#filter-asn').val();
@@ -589,7 +613,8 @@ function populateFilterDropdowns(operations) {
     // Sort and populate operations dropdown
     const actionsSelect = document.getElementById('filter-actions');
     if (actionsSelect) {
-        const currentValue = actionsSelect.value;
+        // Preserve current Select2 selection
+        const currentValues = $(actionsSelect).val() || [];
         actionsSelect.innerHTML = '<option value="">Toutes les actions</option>';
         Array.from(uniqueOperations).sort().forEach(operation => {
             const option = document.createElement('option');
@@ -597,13 +622,18 @@ function populateFilterDropdowns(operations) {
             option.textContent = operation;
             actionsSelect.appendChild(option);
         });
-        actionsSelect.value = currentValue;
+        // Restore previous selection if values still exist
+        if (currentValues.length > 0) {
+            $(actionsSelect).val(currentValues);
+        }
+        // Trigger Select2 to refresh the options list
+        $(actionsSelect).trigger('change.select2');
     }
     
     // Sort and populate countries dropdown
     const countrySelect = document.getElementById('filter-country');
     if (countrySelect) {
-        const currentValue = countrySelect.value;
+        const currentValues = $(countrySelect).val() || [];
         countrySelect.innerHTML = '<option value="">Tous les pays</option>';
         Array.from(uniqueCountries.values()).sort().forEach(country => {
             const option = document.createElement('option');
@@ -611,7 +641,9 @@ function populateFilterDropdowns(operations) {
             option.textContent = country;
             countrySelect.appendChild(option);
         });
-        countrySelect.value = currentValue;
+        if (currentValues.length > 0) {
+            $(countrySelect).val(currentValues);
+        }
         // Trigger Select2 to refresh the options list
         $(countrySelect).trigger('change.select2');
     }
@@ -619,7 +651,7 @@ function populateFilterDropdowns(operations) {
     // Sort and populate ASN dropdown
     const asnSelect = document.getElementById('filter-asn');
     if (asnSelect) {
-        const currentValue = asnSelect.value;
+        const currentValues = $(asnSelect).val() || [];
         asnSelect.innerHTML = '<option value="">Tous les ASN</option>';
         Array.from(uniqueAsns.entries())
             .sort((a, b) => a[0].localeCompare(b[0]))
@@ -629,7 +661,9 @@ function populateFilterDropdowns(operations) {
                 option.textContent = display;
                 asnSelect.appendChild(option);
             });
-        asnSelect.value = currentValue;
+        if (currentValues.length > 0) {
+            $(asnSelect).val(currentValues);
+        }
         // Trigger Select2 to refresh the options list
         $(asnSelect).trigger('change.select2');
     }
@@ -1179,17 +1213,41 @@ function showLogDetails(detail) {
     // Stocker pour les fonctions de recherche
     window.currentAuditData = auditData;
     
+    // Déterminer le workload
+    const workload = auditData.Workload || 'Unknown';
+    
     // Mettre à jour la banner d'infos rapides
-    const statusBadge = auditData.ResultStatus === 'Succeeded' 
+    const statusBadge = auditData.ResultStatus === 'Succeeded' || auditData.ResultStatus === 'Success'
         ? '<span class="badge bg-success">✓ Succès</span>'
-        : auditData.ResultStatus === 'Failed'
+        : auditData.ResultStatus === 'Failed' || auditData.ResultStatus === 'Failure'
         ? '<span class="badge bg-danger">✗ Échec</span>'
+        : auditData.ResultStatus === 'PartiallySucceeded'
+        ? '<span class="badge bg-warning text-dark">⚠ Partiel</span>'
         : '<span class="badge bg-secondary">' + (auditData.ResultStatus || '-') + '</span>';
+    
+    // Workload badge avec couleur selon le type
+    const workloadColors = {
+        'Exchange': 'primary',
+        'SharePoint': 'success',
+        'OneDrive': 'info',
+        'AzureActiveDirectory': 'warning',
+        'MicrosoftTeams': 'purple',
+        'SecurityComplianceCenter': 'danger',
+        'PowerBI': 'dark',
+        'Sway': 'secondary',
+        'Yammer': 'info'
+    };
+    const wlColor = workloadColors[workload] || 'secondary';
+    const workloadLabel = getWorkloadLabel(workload);
+    document.getElementById('quick-workload').innerHTML = `<span class="badge bg-${wlColor}">${workloadLabel}</span>`;
     
     document.getElementById('quick-operation').textContent = auditData.Operation || '-';
     document.getElementById('quick-user').textContent = auditData.UserId || '-';
     document.getElementById('quick-date').textContent = formatDate(auditData.CreationTime) || '-';
     document.getElementById('quick-status').innerHTML = statusBadge;
+    
+    // Adapter les onglets selon le workload
+    adaptModalTabs(workload, auditData);
     
     // Onglet Infos
     renderInfosTab(auditData);
@@ -1211,6 +1269,92 @@ function showLogDetails(detail) {
     modal.show();
 }
 
+// Mapping des noms de workload lisibles
+function getWorkloadLabel(workload) {
+    const labels = {
+        'Exchange': 'Exchange',
+        'SharePoint': 'SharePoint',
+        'OneDrive': 'OneDrive',
+        'AzureActiveDirectory': 'Entra ID (Azure AD)',
+        'MicrosoftTeams': 'Microsoft Teams',
+        'SecurityComplianceCenter': 'Sécurité & Conformité',
+        'PowerBI': 'Power BI',
+        'Sway': 'Sway',
+        'Yammer': 'Yammer',
+        'MicrosoftForms': 'Microsoft Forms',
+        'MicrosoftStream': 'Microsoft Stream',
+        'ThreatIntelligence': 'Threat Intelligence',
+        'PowerApps': 'Power Apps',
+        'PowerAutomate': 'Power Automate',
+        'Dynamics365': 'Dynamics 365'
+    };
+    return labels[workload] || workload;
+}
+
+// Adapter les onglets de la modale selon le type de workload
+function adaptModalTabs(workload, auditData) {
+    const foldersTab = document.getElementById('folders-tab');
+    const itemsTab = document.getElementById('items-tab');
+    
+    // Réinitialiser la visibilité des onglets
+    if (foldersTab) foldersTab.closest('.nav-item').style.display = '';
+    if (itemsTab) itemsTab.closest('.nav-item').style.display = '';
+    
+    // Adapter le texte et la visibilité des onglets selon le workload
+    switch (workload) {
+        case 'Exchange':
+            if (foldersTab) {
+                foldersTab.innerHTML = '<i class="fas fa-folder me-2"></i>Dossiers Mail';
+                foldersTab.closest('.nav-item').style.display = (auditData.Folders && auditData.Folders.length > 0) ? '' : 'none';
+            }
+            if (itemsTab) {
+                itemsTab.innerHTML = '<i class="fas fa-envelope me-2"></i>Éléments Mail';
+                const hasItems = (auditData.AffectedItems && auditData.AffectedItems.length > 0) || auditData.Item;
+                itemsTab.closest('.nav-item').style.display = hasItems ? '' : 'none';
+            }
+            break;
+            
+        case 'SharePoint':
+        case 'OneDrive':
+            if (foldersTab) {
+                foldersTab.innerHTML = '<i class="fas fa-folder-open me-2"></i>Fichiers & Dossiers';
+                foldersTab.closest('.nav-item').style.display = '';
+            }
+            if (itemsTab) {
+                itemsTab.innerHTML = '<i class="fas fa-file me-2"></i>Détails Fichier';
+                itemsTab.closest('.nav-item').style.display = '';
+            }
+            break;
+            
+        case 'AzureActiveDirectory':
+            if (foldersTab) {
+                foldersTab.innerHTML = '<i class="fas fa-key me-2"></i>Propriétés Modifiées';
+                const hasModifiedProps = auditData.ModifiedProperties && auditData.ModifiedProperties.length > 0;
+                foldersTab.closest('.nav-item').style.display = hasModifiedProps ? '' : 'none';
+            }
+            if (itemsTab) {
+                itemsTab.innerHTML = '<i class="fas fa-user-shield me-2"></i>Cibles';
+                const hasTarget = auditData.Target && auditData.Target.length > 0;
+                itemsTab.closest('.nav-item').style.display = hasTarget ? '' : 'none';
+            }
+            break;
+            
+        case 'MicrosoftTeams':
+            if (foldersTab) {
+                foldersTab.innerHTML = '<i class="fas fa-users me-2"></i>Équipes & Canaux';
+            }
+            if (itemsTab) {
+                itemsTab.innerHTML = '<i class="fas fa-comments me-2"></i>Détails Teams';
+            }
+            break;
+            
+        default:
+            if (foldersTab) foldersTab.innerHTML = '<i class="fas fa-folder me-2"></i>Dossiers';
+            if (itemsTab) itemsTab.innerHTML = '<i class="fas fa-list me-2"></i>Éléments';
+            break;
+    }
+}
+
 // Onglet Infos - Afficher les informations principales
 function renderInfosTab(auditData) {
     let specificContent = '';
@@ -1220,6 +1364,89 @@ function renderInfosTab(auditData) {
         specificContent = renderOperationDetails(auditData.Operation, auditData);
     }
     
+    const workload = auditData.Workload || '';
+    const workloadLabel = getWorkloadLabel(workload);
+    
+    // Déterminer les champs réseau à afficher
+    const clientIp = auditData.ClientIP || auditData.ClientIPAddress || auditData.ActorIPAddress || auditData.SenderIp || '-';
+    
+    // Champs spécifiques au workload
+    let workloadSpecificFields = '';
+    
+    if (workload === 'Exchange') {
+        workloadSpecificFields = `
+            ${auditData.MailboxOwnerUPN ? `
+            <div class="json-item">
+                <span class="json-key">Propriétaire boîte mail:</span>
+                <span class="json-value">${auditData.MailboxOwnerUPN}</span>
+            </div>` : ''}
+            ${auditData.LogonType !== undefined ? `
+            <div class="json-item">
+                <span class="json-key">Type de connexion:</span>
+                <span class="json-value"><span class="badge bg-info">${getLogonTypeLabel(auditData.LogonType)}</span></span>
+            </div>` : ''}
+            ${auditData.ExternalAccess !== undefined ? `
+            <div class="json-item">
+                <span class="json-key">Accès externe:</span>
+                <span class="json-value">${auditData.ExternalAccess ? '<span class="badge bg-warning text-dark">Oui</span>' : 'Non'}</span>
+            </div>` : ''}
+            ${auditData.ClientInfoString ? `
+            <div class="json-item">
+                <span class="json-key">Info Client:</span>
+                <span class="json-value">${formatClientInfo(auditData.ClientInfoString)}</span>
+            </div>` : ''}
+        `;
+    } else if (workload === 'SharePoint' || workload === 'OneDrive') {
+        workloadSpecificFields = `
+            ${auditData.SiteUrl ? `
+            <div class="json-item">
+                <span class="json-key">Site:</span>
+                <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank"><small>${auditData.SiteUrl}</small></a></span>
+            </div>` : ''}
+            ${auditData.SourceRelativeUrl ? `
+            <div class="json-item">
+                <span class="json-key">Chemin:</span>
+                <span class="json-value"><code>${auditData.SourceRelativeUrl}</code></span>
+            </div>` : ''}
+            ${auditData.SourceFileName ? `
+            <div class="json-item">
+                <span class="json-key">Fichier/Dossier:</span>
+                <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+            </div>` : ''}
+            ${auditData.UserAgent ? `
+            <div class="json-item">
+                <span class="json-key">User Agent:</span>
+                <span class="json-value"><small class="text-muted">${auditData.UserAgent}</small></span>
+            </div>` : ''}
+        `;
+    } else if (workload === 'AzureActiveDirectory') {
+        workloadSpecificFields = `
+            ${auditData.ObjectId ? `
+            <div class="json-item">
+                <span class="json-key">Application/Objet:</span>
+                <span class="json-value"><code>${auditData.ObjectId}</code></span>
+            </div>` : ''}
+            ${auditData.LogonError ? `
+            <div class="json-item">
+                <span class="json-key">Erreur:</span>
+                <span class="json-value"><span class="badge bg-danger">${auditData.LogonError}</span></span>
+            </div>` : ''}
+        `;
+    } else if (workload === 'MicrosoftTeams') {
+        workloadSpecificFields = `
+            ${auditData.TeamName ? `
+            <div class="json-item">
+                <span class="json-key">Équipe:</span>
+                <span class="json-value"><strong>${auditData.TeamName}</strong></span>
+            </div>` : ''}
+            ${auditData.ChannelName ? `
+            <div class="json-item">
+                <span class="json-key">Canal:</span>
+                <span class="json-value"><span class="badge bg-secondary"># ${auditData.ChannelName}</span></span>
+            </div>` : ''}
+        `;
+    }
+    
     const infosHtml = `
         <div class="info-section">
             <h6 class="info-section-title">Informations Principales</h6>
@@ -1227,6 +1454,10 @@ function renderInfosTab(auditData) {
                 <div class="json-item">
                     <span class="json-key">Date:</span>
                     <span class="json-value">${formatDate(auditData.CreationTime)}</span>
+                </div>
+                <div class="json-item">
+                    <span class="json-key">Workload:</span>
+                    <span class="json-value"><strong>${workloadLabel}</strong></span>
                 </div>
                 <div class="json-item">
                     <span class="json-key">Opération:</span>
@@ -1241,25 +1472,17 @@ function renderInfosTab(auditData) {
                     <span class="json-value">${auditData.ResultStatus || '-'}</span>
                 </div>
                 <div class="json-item">
-                    <span class="json-key">Workload:</span>
-                    <span class="json-value">${auditData.Workload || '-'}</span>
-                </div>
-                <div class="json-item">
                     <span class="json-key">IP Client:</span>
-                    <span class="json-value">${auditData.ClientIP || auditData.ClientIPAddress || '-'}</span>
+                    <span class="json-value"><code>${clientIp}</code></span>
                 </div>
                 ${auditData._geo_country ? `
                 <div class="json-item">
                     <span class="json-key">Géolocalisation:</span>
-                    <span class="json-value badge bg-info text-white">
+                    <span class="json-value"><span class="badge bg-info text-white">
                         ${auditData._geo_country}${auditData._geo_country_code ? ' (' + auditData._geo_country_code + ')' : ''}
-                    </span>
-                </div>
-                ` : ''}
-                <div class="json-item">
-                    <span class="json-key">Info Client:</span>
-                    <span class="json-value">${auditData.ClientInfoString || '-'}</span>
-                </div>
+                    </span></span>
+                </div>` : ''}
+                ${workloadSpecificFields}
             </div>
         </div>
         ${specificContent}
@@ -1268,8 +1491,72 @@ function renderInfosTab(auditData) {
     document.getElementById('infos-container').innerHTML = infosHtml;
 }
 
-// Fonction générale pour afficher les détails d'opérations
+// Fonction générale pour afficher les détails d'opérations - dispatch par Workload puis par Operation
 function renderOperationDetails(operation, auditData) {
+    const workload = auditData.Workload || '';
+    
+    // === EXCHANGE ===
+    if (workload === 'Exchange') {
+        return renderExchangeOperationDetails(operation, auditData);
+    }
+    
+    // === SHAREPOINT / ONEDRIVE ===
+    if (workload === 'SharePoint' || workload === 'OneDrive') {
+        return renderSharePointOperationDetails(operation, auditData);
+    }
+    
+    // === AZURE ACTIVE DIRECTORY / ENTRA ID ===
+    if (workload === 'AzureActiveDirectory') {
+        return renderEntraOperationDetails(operation, auditData);
+    }
+    
+    // === MICROSOFT TEAMS ===
+    if (workload === 'MicrosoftTeams') {
+        return renderTeamsOperationDetails(operation, auditData);
+    }
+    
+    // === SECURITY & COMPLIANCE CENTER ===
+    if (workload === 'SecurityComplianceCenter' || workload === 'ThreatIntelligence') {
+        return renderSecurityOperationDetails(operation, auditData);
+    }
+    
+    // === POWER BI ===
+    if (workload === 'PowerBI') {
+        return renderPowerBIOperationDetails(operation, auditData);
+    }
+    
+    // === FALLBACK: essayer de détecter via l'opération elle-même ===
+    // Détection Exchange par opération
+    if (operation.includes('InboxRule') || operation === 'MailItemsAccessed' || 
+        operation === 'MoveToDeletedItems' || operation === 'TIMailData' ||
+        operation === 'Send' || operation === 'HardDelete' || operation === 'SoftDelete') {
+        return renderExchangeOperationDetails(operation, auditData);
+    }
+    
+    // Détection SharePoint par opération
+    if (operation.startsWith('File') || operation.startsWith('Folder') || 
+        operation === 'PageViewed' || operation === 'SearchQueryPerformed' ||
+        operation.startsWith('SharingSet') || operation.startsWith('AnonymousLink') ||
+        operation.startsWith('CompanyLink') || operation === 'SiteCollectionCreated') {
+        return renderSharePointOperationDetails(operation, auditData);
+    }
+    
+    // Détection Entra par opération
+    if (operation === 'UserLoggedIn' || operation === 'UserLoginFailed' ||
+        operation.startsWith('Add ') || operation.startsWith('Update ') ||
+        operation.startsWith('Delete ') || operation.startsWith('Set ') ||
+        operation.startsWith('Reset ') || operation.startsWith('Change ') ||
+        operation.startsWith('Disable ') || operation.startsWith('Enable ')) {
+        return renderEntraOperationDetails(operation, auditData);
+    }
+    
+    return renderGenericOperationDetails(operation, auditData);
+}
+
+// =============================================
+// EXCHANGE OPERATIONS RENDERER
+// =============================================
+function renderExchangeOperationDetails(operation, auditData) {
     if (operation.includes('InboxRule')) {
         return renderRuleDetails(auditData);
     } else if (operation === 'Update') {
@@ -1280,9 +1567,1029 @@ function renderOperationDetails(operation, auditData) {
         return renderMoveDetails(auditData);
     } else if (operation === 'TIMailData') {
         return renderTIMailDataDetails(auditData);
+    } else if (operation === 'Send') {
+        return renderExchangeSendDetails(auditData);
+    } else if (operation === 'HardDelete' || operation === 'SoftDelete') {
+        return renderExchangeDeleteDetails(operation, auditData);
+    } else if (operation === 'Create') {
+        return renderExchangeCreateDetails(auditData);
+    } else if (operation === 'Copy' || operation === 'Move') {
+        return renderExchangeMoveDetails(operation, auditData);
+    } else if (operation === 'MailboxLogin') {
+        return renderExchangeMailboxLoginDetails(auditData);
+    } else if (operation === 'SearchQueryInitiatedExchange') {
+        return renderExchangeSearchDetails(auditData);
+    } else if (operation.startsWith('Set-') || operation.startsWith('Remove-') || operation.startsWith('New-') || operation.startsWith('Enable-') || operation.startsWith('Disable-')) {
+        return renderExchangeCmdletDetails(operation, auditData);
     } else {
         return renderGenericOperationDetails(operation, auditData);
     }
+}
+
+// Détails d'envoi de mail Exchange
+function renderExchangeSendDetails(auditData) {
+    const item = auditData.Item || {};
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-paper-plane me-2 text-primary"></i>Envoi de Message</h6>
+            <div class="info-section-content">
+                ${item.Subject ? `
+                <div class="json-item">
+                    <span class="json-key">Sujet:</span>
+                    <span class="json-value"><strong>"${item.Subject}"</strong></span>
+                </div>` : ''}
+                ${item.ParentFolder?.Path ? `
+                <div class="json-item">
+                    <span class="json-key">Dossier:</span>
+                    <span class="json-value"><code>${item.ParentFolder.Path.replace(/\\\\/g, '/')}</code></span>
+                </div>` : ''}
+                ${item.SizeInBytes ? `
+                <div class="json-item">
+                    <span class="json-key">Taille:</span>
+                    <span class="json-value">${formatBytes(item.SizeInBytes)}</span>
+                </div>` : ''}
+                ${item.Attachments ? `
+                <div class="json-item">
+                    <span class="json-key">Pièces jointes:</span>
+                    <span class="json-value"><code>${item.Attachments}</code></span>
+                </div>` : ''}
+                ${auditData.ClientInfoString ? `
+                <div class="json-item">
+                    <span class="json-key">Client:</span>
+                    <span class="json-value"><small>${formatClientInfo(auditData.ClientInfoString)}</small></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de suppression Exchange
+function renderExchangeDeleteDetails(operation, auditData) {
+    const affectedItems = auditData.AffectedItems || [];
+    const opLabel = operation === 'HardDelete' ? 'Suppression Définitive' : 'Suppression Temporaire';
+    const opColor = operation === 'HardDelete' ? 'danger' : 'warning';
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-trash me-2 text-${opColor}"></i>${opLabel}</h6>
+            <div class="info-section-content">
+                <div class="json-item">
+                    <span class="json-key">Éléments Affectés:</span>
+                    <span class="json-value"><span class="badge bg-${opColor}">${affectedItems.length}</span></span>
+                </div>
+                ${auditData.Folder?.Path ? `
+                <div class="json-item">
+                    <span class="json-key">Dossier Source:</span>
+                    <span class="json-value"><code>${auditData.Folder.Path.replace(/\\\\/g, '/')}</code></span>
+                </div>` : ''}
+                ${affectedItems.length > 0 ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-${opColor}"><i class="fas fa-trash me-2"></i>Éléments Supprimés</h6>
+                    ${affectedItems.slice(0, 10).map(item => `
+                    <div class="json-item">
+                        <span class="json-key">Sujet:</span>
+                        <span class="json-value">"${item.Subject || 'Sans sujet'}"</span>
+                    </div>`).join('')}
+                    ${affectedItems.length > 10 ? `<div class="text-muted mt-2"><em>... et ${affectedItems.length - 10} autres éléments</em></div>` : ''}
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de création d'élément Exchange
+function renderExchangeCreateDetails(auditData) {
+    const item = auditData.Item || {};
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-plus-circle me-2 text-success"></i>Création d'Élément</h6>
+            <div class="info-section-content">
+                ${item.Subject ? `
+                <div class="json-item">
+                    <span class="json-key">Sujet:</span>
+                    <span class="json-value"><strong>"${item.Subject}"</strong></span>
+                </div>` : ''}
+                ${item.ParentFolder?.Path ? `
+                <div class="json-item">
+                    <span class="json-key">Dossier:</span>
+                    <span class="json-value"><code>${item.ParentFolder.Path.replace(/\\\\/g, '/')}</code></span>
+                </div>` : ''}
+                ${item.SizeInBytes ? `
+                <div class="json-item">
+                    <span class="json-key">Taille:</span>
+                    <span class="json-value">${formatBytes(item.SizeInBytes)}</span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de déplacement/copie Exchange
+function renderExchangeMoveDetails(operation, auditData) {
+    const title = operation === 'Copy' ? 'Copie d\'Élément' : 'Déplacement d\'Élément';
+    const icon = operation === 'Copy' ? 'fa-copy' : 'fa-arrows-alt';
+    const item = auditData.Item || {};
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${icon} me-2 text-info"></i>${title}</h6>
+            <div class="info-section-content">
+                ${item.Subject ? `
+                <div class="json-item">
+                    <span class="json-key">Sujet:</span>
+                    <span class="json-value"><strong>"${item.Subject}"</strong></span>
+                </div>` : ''}
+                ${auditData.Folder?.Path ? `
+                <div class="json-item">
+                    <span class="json-key">Dossier Source:</span>
+                    <span class="json-value"><code>${auditData.Folder.Path.replace(/\\\\/g, '/')}</code></span>
+                </div>` : ''}
+                ${auditData.DestFolder?.Path ? `
+                <div class="json-item">
+                    <span class="json-key">Dossier Destination:</span>
+                    <span class="json-value"><code>${auditData.DestFolder.Path.replace(/\\\\/g, '/')}</code></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de connexion boîte mail Exchange
+function renderExchangeMailboxLoginDetails(auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-sign-in-alt me-2 text-success"></i>Connexion Boîte Mail</h6>
+            <div class="info-section-content">
+                <div class="json-item">
+                    <span class="json-key">Boîte mail:</span>
+                    <span class="json-value"><strong>${auditData.MailboxOwnerUPN || auditData.UserId || '-'}</strong></span>
+                </div>
+                ${auditData.LogonType !== undefined ? `
+                <div class="json-item">
+                    <span class="json-key">Type de connexion:</span>
+                    <span class="json-value"><span class="badge bg-info">${getLogonTypeLabel(auditData.LogonType)}</span></span>
+                </div>` : ''}
+                ${auditData.ClientInfoString ? `
+                <div class="json-item">
+                    <span class="json-key">Client:</span>
+                    <span class="json-value"><small>${formatClientInfo(auditData.ClientInfoString)}</small></span>
+                </div>` : ''}
+                ${auditData.ExternalAccess !== undefined ? `
+                <div class="json-item">
+                    <span class="json-key">Accès externe:</span>
+                    <span class="json-value">${auditData.ExternalAccess ? '<span class="badge bg-warning">Oui</span>' : '<span class="badge bg-secondary">Non</span>'}</span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de recherche Exchange
+function renderExchangeSearchDetails(auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-search me-2 text-info"></i>Recherche Exchange</h6>
+            <div class="info-section-content">
+                ${auditData.QueryText ? `
+                <div class="json-item">
+                    <span class="json-key">Requête:</span>
+                    <span class="json-value"><code>${auditData.QueryText}</code></span>
+                </div>` : ''}
+                ${auditData.QueryCorrelationId ? `
+                <div class="json-item">
+                    <span class="json-key">ID Corrélation:</span>
+                    <span class="json-value"><small class="font-monospace">${auditData.QueryCorrelationId}</small></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de cmdlet Exchange (Set-Mailbox, New-TransportRule, etc.)
+function renderExchangeCmdletDetails(operation, auditData) {
+    const parameters = auditData.Parameters || [];
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-terminal me-2 text-dark"></i>Commande Exchange: ${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet cible:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${parameters.length > 0 ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-info"><i class="fas fa-cogs me-2"></i>Paramètres (${parameters.length})</h6>
+                    ${parameters.slice(0, 20).map(param => `
+                    <div class="json-item">
+                        <span class="json-key">${param.Name || '-'}:</span>
+                        <span class="json-value"><code>${param.Value || '-'}</code></span>
+                    </div>`).join('')}
+                    ${parameters.length > 20 ? `<div class="text-muted mt-2"><em>... et ${parameters.length - 20} autres paramètres</em></div>` : ''}
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Helper pour formater les infos client Exchange
+function formatClientInfo(clientInfoString) {
+    if (!clientInfoString) return '-';
+    if (clientInfoString.includes('Client=OWA')) return '<span class="badge bg-primary">Outlook Web Access</span>';
+    if (clientInfoString.includes('Client=REST')) return '<span class="badge bg-info">REST API</span>';
+    if (clientInfoString.includes('Client=Outlook')) return '<span class="badge bg-success">Outlook Desktop</span>';
+    if (clientInfoString.includes('Client=Exchange')) return '<span class="badge bg-secondary">Exchange</span>';
+    if (clientInfoString.includes('Client=ActiveSync')) return '<span class="badge bg-warning text-dark">ActiveSync</span>';
+    if (clientInfoString.includes('Client=POP3')) return '<span class="badge bg-danger">POP3</span>';
+    if (clientInfoString.includes('Client=IMAP')) return '<span class="badge bg-danger">IMAP</span>';
+    return `<code>${clientInfoString.substring(0, 60)}${clientInfoString.length > 60 ? '...' : ''}</code>`;
+}
+
+// =============================================
+// SHAREPOINT / ONEDRIVE OPERATIONS RENDERER
+// =============================================
+function renderSharePointOperationDetails(operation, auditData) {
+    // Opérations fichier
+    if (operation.startsWith('File') || operation === 'FilePreviewed') {
+        return renderSharePointFileDetails(operation, auditData);
+    }
+    // Opérations dossier
+    if (operation.startsWith('Folder')) {
+        return renderSharePointFolderDetails(operation, auditData);
+    }
+    // Opérations de partage
+    if (operation.includes('Sharing') || operation.includes('AnonymousLink') || 
+        operation.includes('CompanyLink') || operation.includes('SecureLink') ||
+        operation.startsWith('AddedToSecure') || operation === 'SharingSet' ||
+        operation === 'SharingRevoked' || operation === 'SharingInvitationCreated') {
+        return renderSharePointSharingDetails(operation, auditData);
+    }
+    // Recherche
+    if (operation === 'SearchQueryPerformed') {
+        return renderSharePointSearchDetails(auditData);
+    }
+    // Opérations de page
+    if (operation === 'PageViewed' || operation === 'PageViewedExtended') {
+        return renderSharePointPageDetails(auditData);
+    }
+    // Opérations de site
+    if (operation.includes('Site') || operation.includes('site')) {
+        return renderSharePointSiteDetails(operation, auditData);
+    }
+    // Synchronisation
+    if (operation.includes('Sync') || operation === 'FileSyncDownloadedFull' || 
+        operation === 'FileSyncUploadedFull') {
+        return renderSharePointSyncDetails(operation, auditData);
+    }
+    
+    return renderGenericOperationDetails(operation, auditData);
+}
+
+// Détails fichier SharePoint/OneDrive
+function renderSharePointFileDetails(operation, auditData) {
+    const opIcons = {
+        'FileAccessed': { icon: 'fa-eye', color: 'info', label: 'Fichier Consulté' },
+        'FileAccessedExtended': { icon: 'fa-eye', color: 'info', label: 'Fichier Consulté (étendu)' },
+        'FileDownloaded': { icon: 'fa-download', color: 'success', label: 'Fichier Téléchargé' },
+        'FileUploaded': { icon: 'fa-upload', color: 'primary', label: 'Fichier Uploadé' },
+        'FileModified': { icon: 'fa-edit', color: 'warning', label: 'Fichier Modifié' },
+        'FileModifiedExtended': { icon: 'fa-edit', color: 'warning', label: 'Fichier Modifié (étendu)' },
+        'FileDeleted': { icon: 'fa-trash', color: 'danger', label: 'Fichier Supprimé' },
+        'FileDeletedFirstStageRecycleBin': { icon: 'fa-trash', color: 'danger', label: 'Fichier en Corbeille' },
+        'FileRecycled': { icon: 'fa-recycle', color: 'warning', label: 'Fichier Recyclé' },
+        'FileMoved': { icon: 'fa-arrows-alt', color: 'info', label: 'Fichier Déplacé' },
+        'FileRenamed': { icon: 'fa-i-cursor', color: 'info', label: 'Fichier Renommé' },
+        'FileCopied': { icon: 'fa-copy', color: 'info', label: 'Fichier Copié' },
+        'FileCheckedOut': { icon: 'fa-lock', color: 'warning', label: 'Fichier Verrouillé' },
+        'FileCheckedIn': { icon: 'fa-lock-open', color: 'success', label: 'Fichier Déverrouillé' },
+        'FilePreviewed': { icon: 'fa-search', color: 'secondary', label: 'Aperçu Fichier' },
+        'FileVersionsAllDeleted': { icon: 'fa-history', color: 'danger', label: 'Versions Supprimées' },
+        'FileSensitivityLabelApplied': { icon: 'fa-tag', color: 'info', label: 'Label de Sensibilité Appliqué' },
+        'FileMalwareDetected': { icon: 'fa-bug', color: 'danger', label: 'Malware Détecté' },
+    };
+    
+    const opInfo = opIcons[operation] || { icon: 'fa-file', color: 'secondary', label: operation };
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${opInfo.icon} me-2 text-${opInfo.color}"></i>${opInfo.label}</h6>
+            <div class="info-section-content">
+                ${auditData.SourceFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Nom du fichier:</span>
+                    <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.SourceRelativeUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Chemin source:</span>
+                    <span class="json-value"><code>${auditData.SourceRelativeUrl}</code></span>
+                </div>` : ''}
+                ${auditData.DestinationFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Nom destination:</span>
+                    <span class="json-value"><strong>${auditData.DestinationFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.DestinationRelativeUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Chemin destination:</span>
+                    <span class="json-value"><code>${auditData.DestinationRelativeUrl}</code></span>
+                </div>` : ''}
+                ${auditData.SiteUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Site:</span>
+                    <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank">${auditData.SiteUrl}</a></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">URL complète:</span>
+                    <span class="json-value"><small><code>${auditData.ObjectId}</code></small></span>
+                </div>` : ''}
+                ${auditData.ItemType ? `
+                <div class="json-item">
+                    <span class="json-key">Type:</span>
+                    <span class="json-value"><span class="badge bg-secondary">${auditData.ItemType}</span></span>
+                </div>` : ''}
+                ${auditData.UserAgent ? `
+                <div class="json-item">
+                    <span class="json-key">User Agent:</span>
+                    <span class="json-value"><small class="text-muted">${auditData.UserAgent}</small></span>
+                </div>` : ''}
+                ${auditData.FileSizeBytes ? `
+                <div class="json-item">
+                    <span class="json-key">Taille:</span>
+                    <span class="json-value">${formatBytes(auditData.FileSizeBytes)}</span>
+                </div>` : ''}
+                ${auditData.SourceFileExtension ? `
+                <div class="json-item">
+                    <span class="json-key">Extension:</span>
+                    <span class="json-value"><span class="badge bg-dark">${auditData.SourceFileExtension}</span></span>
+                </div>` : ''}
+                ${auditData.SensitivityLabelId ? `
+                <div class="json-item">
+                    <span class="json-key">Label Sensibilité:</span>
+                    <span class="json-value"><span class="badge bg-info">${auditData.SensitivityLabelId}</span></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails dossier SharePoint/OneDrive
+function renderSharePointFolderDetails(operation, auditData) {
+    const opLabels = {
+        'FolderCreated': { icon: 'fa-folder-plus', color: 'success', label: 'Dossier Créé' },
+        'FolderDeleted': { icon: 'fa-folder-minus', color: 'danger', label: 'Dossier Supprimé' },
+        'FolderModified': { icon: 'fa-folder', color: 'warning', label: 'Dossier Modifié' },
+        'FolderMoved': { icon: 'fa-folder', color: 'info', label: 'Dossier Déplacé' },
+        'FolderRenamed': { icon: 'fa-folder', color: 'info', label: 'Dossier Renommé' },
+        'FolderCopied': { icon: 'fa-folder', color: 'info', label: 'Dossier Copié' },
+    };
+    
+    const opInfo = opLabels[operation] || { icon: 'fa-folder', color: 'secondary', label: operation };
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${opInfo.icon} me-2 text-${opInfo.color}"></i>${opInfo.label}</h6>
+            <div class="info-section-content">
+                ${auditData.SourceFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Nom:</span>
+                    <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.SourceRelativeUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Chemin:</span>
+                    <span class="json-value"><code>${auditData.SourceRelativeUrl}</code></span>
+                </div>` : ''}
+                ${auditData.DestinationRelativeUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Destination:</span>
+                    <span class="json-value"><code>${auditData.DestinationRelativeUrl}</code></span>
+                </div>` : ''}
+                ${auditData.SiteUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Site:</span>
+                    <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank">${auditData.SiteUrl}</a></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de partage SharePoint/OneDrive
+function renderSharePointSharingDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-share-alt me-2 text-primary"></i>Partage: ${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.SourceFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Élément partagé:</span>
+                    <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">URL:</span>
+                    <span class="json-value"><small><code>${auditData.ObjectId}</code></small></span>
+                </div>` : ''}
+                ${auditData.TargetUserOrGroupName ? `
+                <div class="json-item">
+                    <span class="json-key">Partagé avec:</span>
+                    <span class="json-value"><span class="badge bg-info">${auditData.TargetUserOrGroupName}</span></span>
+                </div>` : ''}
+                ${auditData.TargetUserOrGroupType ? `
+                <div class="json-item">
+                    <span class="json-key">Type de cible:</span>
+                    <span class="json-value">${auditData.TargetUserOrGroupType}</span>
+                </div>` : ''}
+                ${auditData.EventData ? `
+                <div class="json-item">
+                    <span class="json-key">Données:</span>
+                    <span class="json-value"><small>${typeof auditData.EventData === 'string' ? auditData.EventData : JSON.stringify(auditData.EventData)}</small></span>
+                </div>` : ''}
+                ${auditData.UniqueSharingId ? `
+                <div class="json-item">
+                    <span class="json-key">ID Partage:</span>
+                    <span class="json-value"><small class="font-monospace">${auditData.UniqueSharingId}</small></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de recherche SharePoint
+function renderSharePointSearchDetails(auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-search me-2 text-info"></i>Recherche SharePoint</h6>
+            <div class="info-section-content">
+                ${auditData.QueryText ? `
+                <div class="json-item">
+                    <span class="json-key">Requête:</span>
+                    <span class="json-value"><code>${auditData.QueryText}</code></span>
+                </div>` : ''}
+                ${auditData.SearchScope !== undefined ? `
+                <div class="json-item">
+                    <span class="json-key">Portée:</span>
+                    <span class="json-value">${auditData.SearchScope}</span>
+                </div>` : ''}
+                ${auditData.ResultCount !== undefined ? `
+                <div class="json-item">
+                    <span class="json-key">Résultats:</span>
+                    <span class="json-value"><span class="badge bg-primary">${auditData.ResultCount}</span></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de page SharePoint
+function renderSharePointPageDetails(auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-file-alt me-2 text-info"></i>Page Consultée</h6>
+            <div class="info-section-content">
+                ${auditData.SourceFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Page:</span>
+                    <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">URL:</span>
+                    <span class="json-value"><small><code>${auditData.ObjectId}</code></small></span>
+                </div>` : ''}
+                ${auditData.SiteUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Site:</span>
+                    <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank">${auditData.SiteUrl}</a></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de site SharePoint
+function renderSharePointSiteDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-globe me-2 text-primary"></i>Opération Site: ${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.SiteUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Site:</span>
+                    <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank">${auditData.SiteUrl}</a></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${auditData.TargetUserOrGroupName ? `
+                <div class="json-item">
+                    <span class="json-key">Cible:</span>
+                    <span class="json-value">${auditData.TargetUserOrGroupName}</span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de synchronisation SharePoint/OneDrive
+function renderSharePointSyncDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-sync me-2 text-info"></i>Synchronisation: ${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.SourceFileName ? `
+                <div class="json-item">
+                    <span class="json-key">Fichier:</span>
+                    <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                </div>` : ''}
+                ${auditData.SourceRelativeUrl ? `
+                <div class="json-item">
+                    <span class="json-key">Chemin:</span>
+                    <span class="json-value"><code>${auditData.SourceRelativeUrl}</code></span>
+                </div>` : ''}
+                ${auditData.UserAgent ? `
+                <div class="json-item">
+                    <span class="json-key">User Agent:</span>
+                    <span class="json-value"><small class="text-muted">${auditData.UserAgent}</small></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// =============================================
+// ENTRA ID (AZURE AD) OPERATIONS RENDERER
+// =============================================
+function renderEntraOperationDetails(operation, auditData) {
+    // Connexion / Déconnexion
+    if (operation === 'UserLoggedIn' || operation === 'UserLoginFailed') {
+        return renderEntraLoginDetails(operation, auditData);
+    }
+    // Gestion des utilisateurs
+    if (operation.includes('user') || operation.includes('User') || 
+        operation.includes('member') || operation.includes('Member')) {
+        return renderEntraUserManagementDetails(operation, auditData);
+    }
+    // Gestion des mots de passe
+    if (operation.includes('password') || operation.includes('Password') ||
+        operation.includes('Reset ') || operation.includes('Change ')) {
+        return renderEntraPasswordDetails(operation, auditData);
+    }
+    // Gestion des groupes
+    if (operation.includes('group') || operation.includes('Group')) {
+        return renderEntraGroupDetails(operation, auditData);
+    }
+    // Gestion des applications
+    if (operation.includes('application') || operation.includes('Application') ||
+        operation.includes('service principal') || operation.includes('ServicePrincipal') ||
+        operation.includes('OAuth') || operation.includes('Consent')) {
+        return renderEntraAppDetails(operation, auditData);
+    }
+    // Gestion des rôles
+    if (operation.includes('role') || operation.includes('Role')) {
+        return renderEntraRoleDetails(operation, auditData);
+    }
+    // Politiques / Conditional Access
+    if (operation.includes('policy') || operation.includes('Policy') ||
+        operation.includes('ConditionalAccess')) {
+        return renderEntraPolicyDetails(operation, auditData);
+    }
+    
+    return renderEntraGenericDetails(operation, auditData);
+}
+
+// Détails de connexion Entra
+function renderEntraLoginDetails(operation, auditData) {
+    const isFailure = operation === 'UserLoginFailed';
+    const icon = isFailure ? 'fa-times-circle' : 'fa-sign-in-alt';
+    const color = isFailure ? 'danger' : 'success';
+    const label = isFailure ? 'Échec de Connexion' : 'Connexion Utilisateur';
+    
+    // Extraire des données intéressantes de ExtendedProperties
+    const extendedProps = {};
+    if (Array.isArray(auditData.ExtendedProperties)) {
+        auditData.ExtendedProperties.forEach(prop => {
+            extendedProps[prop.Name] = prop.Value;
+        });
+    }
+    
+    // Extraire les DeviceProperties
+    const deviceProps = {};
+    if (Array.isArray(auditData.DeviceProperties)) {
+        auditData.DeviceProperties.forEach(prop => {
+            deviceProps[prop.Name] = prop.Value;
+        });
+    }
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${icon} me-2 text-${color}"></i>${label}</h6>
+            <div class="info-section-content">
+                ${extendedProps.UserAgent ? `
+                <div class="json-item">
+                    <span class="json-key">User Agent:</span>
+                    <span class="json-value"><small>${extendedProps.UserAgent}</small></span>
+                </div>` : ''}
+                ${extendedProps.RequestType ? `
+                <div class="json-item">
+                    <span class="json-key">Type de requête:</span>
+                    <span class="json-value"><span class="badge bg-secondary">${extendedProps.RequestType}</span></span>
+                </div>` : ''}
+                ${extendedProps.ResultStatusDetail ? `
+                <div class="json-item">
+                    <span class="json-key">Détail du statut:</span>
+                    <span class="json-value">${extendedProps.ResultStatusDetail}</span>
+                </div>` : ''}
+                ${auditData.LogonError ? `
+                <div class="json-item">
+                    <span class="json-key">Erreur:</span>
+                    <span class="json-value"><span class="badge bg-danger">${auditData.LogonError}</span></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Application:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                
+                ${Object.keys(deviceProps).length > 0 ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-info"><i class="fas fa-laptop me-2"></i>Appareil</h6>
+                    ${deviceProps.OS ? `
+                    <div class="json-item">
+                        <span class="json-key">OS:</span>
+                        <span class="json-value">${deviceProps.OS}</span>
+                    </div>` : ''}
+                    ${deviceProps.BrowserType ? `
+                    <div class="json-item">
+                        <span class="json-key">Navigateur:</span>
+                        <span class="json-value">${deviceProps.BrowserType}</span>
+                    </div>` : ''}
+                    ${deviceProps.DisplayName ? `
+                    <div class="json-item">
+                        <span class="json-key">Nom appareil:</span>
+                        <span class="json-value">${deviceProps.DisplayName}</span>
+                    </div>` : ''}
+                    ${deviceProps.IsCompliant ? `
+                    <div class="json-item">
+                        <span class="json-key">Conforme:</span>
+                        <span class="json-value">${deviceProps.IsCompliant === 'True' ? '<span class="badge bg-success">Oui</span>' : '<span class="badge bg-warning">Non</span>'}</span>
+                    </div>` : ''}
+                    ${deviceProps.IsManaged ? `
+                    <div class="json-item">
+                        <span class="json-key">Géré:</span>
+                        <span class="json-value">${deviceProps.IsManaged === 'True' ? '<span class="badge bg-success">Oui</span>' : '<span class="badge bg-warning">Non</span>'}</span>
+                    </div>` : ''}
+                </div>` : ''}
+                
+                ${auditData.Actor && auditData.Actor.length > 0 ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-muted"><i class="fas fa-user me-2"></i>Acteurs</h6>
+                    ${auditData.Actor.map(actor => `
+                    <div class="json-item">
+                        <span class="json-key">${actor.Type === 0 ? 'UPN' : actor.Type === 3 ? 'ObjectId' : 'Type ' + actor.Type}:</span>
+                        <span class="json-value"><small>${actor.ID || '-'}</small></span>
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Détails de gestion des utilisateurs Entra
+function renderEntraUserManagementDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-user-cog me-2 text-primary"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet cible:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails des mots de passe Entra
+function renderEntraPasswordDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-key me-2 text-warning"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Utilisateur cible:</span>
+                    <span class="json-value"><strong>${auditData.ObjectId}</strong></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails des groupes Entra
+function renderEntraGroupDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-users me-2 text-info"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Groupe:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails des applications Entra
+function renderEntraAppDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-puzzle-piece me-2 text-success"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Application:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails des rôles Entra
+function renderEntraRoleDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-user-shield me-2 text-danger"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Rôle / Cible:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails des politiques Entra
+function renderEntraPolicyDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-shield-alt me-2 text-dark"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Politique:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Détails génériques Entra
+function renderEntraGenericDetails(operation, auditData) {
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-id-badge me-2 text-warning"></i>${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${renderEntraTargetSection(auditData)}
+                ${renderEntraModifiedPropertiesSection(auditData)}
+            </div>
+        </div>
+    `;
+}
+
+// Helper: Afficher la section Target d'un log Entra
+function renderEntraTargetSection(auditData) {
+    if (!auditData.Target || !Array.isArray(auditData.Target) || auditData.Target.length === 0) {
+        return '';
+    }
+    
+    return `
+        <div class="json-subsection mt-3">
+            <h6 class="text-info"><i class="fas fa-crosshairs me-2"></i>Cibles</h6>
+            ${auditData.Target.map(target => `
+            <div class="json-item">
+                <span class="json-key">${target.Type === 0 ? 'UPN' : target.Type === 2 ? 'Nom' : target.Type === 3 ? 'ObjectId' : target.Type === 5 ? 'Rôle' : target.Type === 6 ? 'Nom Rôle' : target.Type === 10 ? 'Groupe' : 'Type ' + target.Type}:</span>
+                <span class="json-value"><small>${target.ID || '-'}</small></span>
+            </div>`).join('')}
+        </div>
+    `;
+}
+
+// Helper: Afficher les propriétés modifiées d'un log Entra
+function renderEntraModifiedPropertiesSection(auditData) {
+    if (!auditData.ModifiedProperties || !Array.isArray(auditData.ModifiedProperties) || auditData.ModifiedProperties.length === 0) {
+        return '';
+    }
+    
+    return `
+        <div class="json-subsection mt-3">
+            <h6 class="text-warning"><i class="fas fa-edit me-2"></i>Propriétés Modifiées (${auditData.ModifiedProperties.length})</h6>
+            ${auditData.ModifiedProperties.slice(0, 15).map(prop => {
+                const name = prop.Name || '-';
+                const oldVal = prop.OldValue ? (typeof prop.OldValue === 'string' ? prop.OldValue.substring(0, 100) : JSON.stringify(prop.OldValue).substring(0, 100)) : '';
+                const newVal = prop.NewValue ? (typeof prop.NewValue === 'string' ? prop.NewValue.substring(0, 100) : JSON.stringify(prop.NewValue).substring(0, 100)) : '';
+                return `
+                <div class="json-item" style="border-left: 3px solid #ffc107; padding-left: 8px;">
+                    <div><span class="json-key">${name}</span></div>
+                    ${oldVal ? `<div><small class="text-muted">Ancien: <code>${oldVal}${(prop.OldValue || '').length > 100 ? '...' : ''}</code></small></div>` : ''}
+                    ${newVal ? `<div><small class="text-success">Nouveau: <code>${newVal}${(prop.NewValue || '').length > 100 ? '...' : ''}</code></small></div>` : ''}
+                </div>`;
+            }).join('')}
+            ${auditData.ModifiedProperties.length > 15 ? `<div class="text-muted mt-2"><em>... et ${auditData.ModifiedProperties.length - 15} autres propriétés</em></div>` : ''}
+        </div>
+    `;
+}
+
+// =============================================
+// MICROSOFT TEAMS OPERATIONS RENDERER
+// =============================================
+function renderTeamsOperationDetails(operation, auditData) {
+    const teamsIcons = {
+        'MemberAdded': { icon: 'fa-user-plus', color: 'success', label: 'Membre Ajouté' },
+        'MemberRemoved': { icon: 'fa-user-minus', color: 'danger', label: 'Membre Retiré' },
+        'TeamCreated': { icon: 'fa-users', color: 'success', label: 'Équipe Créée' },
+        'TeamDeleted': { icon: 'fa-users-slash', color: 'danger', label: 'Équipe Supprimée' },
+        'ChannelAdded': { icon: 'fa-hashtag', color: 'info', label: 'Canal Ajouté' },
+        'ChannelDeleted': { icon: 'fa-hashtag', color: 'danger', label: 'Canal Supprimé' },
+        'MessageSent': { icon: 'fa-comment', color: 'primary', label: 'Message Envoyé' },
+        'MessageUpdated': { icon: 'fa-edit', color: 'warning', label: 'Message Modifié' },
+        'MessageDeleted': { icon: 'fa-comment-slash', color: 'danger', label: 'Message Supprimé' },
+        'ChatCreated': { icon: 'fa-comments', color: 'info', label: 'Conversation Créée' },
+        'MeetingStarted': { icon: 'fa-video', color: 'success', label: 'Réunion Démarrée' },
+        'MeetingEnded': { icon: 'fa-video-slash', color: 'secondary', label: 'Réunion Terminée' },
+        'MeetingParticipantJoined': { icon: 'fa-sign-in-alt', color: 'info', label: 'Participant Rejoint' },
+        'MeetingParticipantLeft': { icon: 'fa-sign-out-alt', color: 'secondary', label: 'Participant Parti' },
+        'TabAdded': { icon: 'fa-plus-square', color: 'info', label: 'Onglet Ajouté' },
+        'TabRemoved': { icon: 'fa-minus-square', color: 'warning', label: 'Onglet Retiré' },
+        'AppInstalled': { icon: 'fa-puzzle-piece', color: 'success', label: 'Application Installée' },
+        'BotAddedToTeam': { icon: 'fa-robot', color: 'info', label: 'Bot Ajouté' },
+    };
+    
+    const opInfo = teamsIcons[operation] || { icon: 'fa-comment-dots', color: 'secondary', label: operation };
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${opInfo.icon} me-2 text-${opInfo.color}"></i>${opInfo.label}</h6>
+            <div class="info-section-content">
+                ${auditData.TeamName ? `
+                <div class="json-item">
+                    <span class="json-key">Équipe:</span>
+                    <span class="json-value"><strong>${auditData.TeamName}</strong></span>
+                </div>` : ''}
+                ${auditData.ChannelName ? `
+                <div class="json-item">
+                    <span class="json-key">Canal:</span>
+                    <span class="json-value"><span class="badge bg-secondary"># ${auditData.ChannelName}</span></span>
+                </div>` : ''}
+                ${auditData.ChatName ? `
+                <div class="json-item">
+                    <span class="json-key">Conversation:</span>
+                    <span class="json-value">${auditData.ChatName}</span>
+                </div>` : ''}
+                ${auditData.Members && auditData.Members.length > 0 ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-info"><i class="fas fa-users me-2"></i>Membres (${auditData.Members.length})</h6>
+                    ${auditData.Members.slice(0, 10).map(member => `
+                    <div class="json-item">
+                        <span class="json-key">${member.Role || 'Membre'}:</span>
+                        <span class="json-value"><small>${member.UPN || member.DisplayName || '-'}</small></span>
+                    </div>`).join('')}
+                    ${auditData.Members.length > 10 ? `<div class="text-muted"><em>... et ${auditData.Members.length - 10} autres</em></div>` : ''}
+                </div>` : ''}
+                ${auditData.MessageId ? `
+                <div class="json-item">
+                    <span class="json-key">ID Message:</span>
+                    <span class="json-value"><small class="font-monospace">${auditData.MessageId}</small></span>
+                </div>` : ''}
+                ${auditData.CommunicationType ? `
+                <div class="json-item">
+                    <span class="json-key">Type:</span>
+                    <span class="json-value"><span class="badge bg-info">${auditData.CommunicationType}</span></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// =============================================
+// SECURITY & COMPLIANCE CENTER RENDERER
+// =============================================
+function renderSecurityOperationDetails(operation, auditData) {
+    if (operation === 'TIMailData') {
+        return renderTIMailDataDetails(auditData);
+    }
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas fa-shield-alt me-2 text-danger"></i>Sécurité & Conformité: ${operation}</h6>
+            <div class="info-section-content">
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+                ${auditData.AlertType ? `
+                <div class="json-item">
+                    <span class="json-key">Type d'alerte:</span>
+                    <span class="json-value"><span class="badge bg-danger">${auditData.AlertType}</span></span>
+                </div>` : ''}
+                ${auditData.Severity ? `
+                <div class="json-item">
+                    <span class="json-key">Sévérité:</span>
+                    <span class="json-value"><span class="badge bg-${auditData.Severity === 'High' ? 'danger' : auditData.Severity === 'Medium' ? 'warning' : 'info'}">${auditData.Severity}</span></span>
+                </div>` : ''}
+                ${auditData.Comments ? `
+                <div class="json-item">
+                    <span class="json-key">Commentaires:</span>
+                    <span class="json-value">${auditData.Comments}</span>
+                </div>` : ''}
+                ${auditData.Data ? `
+                <div class="json-subsection mt-3">
+                    <h6 class="text-warning"><i class="fas fa-database me-2"></i>Données</h6>
+                    <pre class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto; font-size: 0.8rem;">${typeof auditData.Data === 'string' ? auditData.Data : JSON.stringify(auditData.Data, null, 2)}</pre>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// =============================================
+// POWER BI OPERATIONS RENDERER
+// =============================================
+function renderPowerBIOperationDetails(operation, auditData) {
+    const pbiIcons = {
+        'ViewDashboard': { icon: 'fa-tachometer-alt', color: 'info', label: 'Dashboard Consulté' },
+        'ViewReport': { icon: 'fa-chart-bar', color: 'info', label: 'Rapport Consulté' },
+        'ExportReport': { icon: 'fa-download', color: 'warning', label: 'Rapport Exporté' },
+        'PrintReport': { icon: 'fa-print', color: 'secondary', label: 'Rapport Imprimé' },
+        'CreateDashboard': { icon: 'fa-plus-circle', color: 'success', label: 'Dashboard Créé' },
+        'DeleteDashboard': { icon: 'fa-trash', color: 'danger', label: 'Dashboard Supprimé' },
+        'ShareDashboard': { icon: 'fa-share-alt', color: 'primary', label: 'Dashboard Partagé' },
+        'GetRefreshHistory': { icon: 'fa-history', color: 'secondary', label: 'Historique Rafraîchissement' },
+    };
+    
+    const opInfo = pbiIcons[operation] || { icon: 'fa-chart-line', color: 'secondary', label: operation };
+    
+    return `
+        <div class="info-section mt-3">
+            <h6 class="info-section-title"><i class="fas ${opInfo.icon} me-2 text-${opInfo.color}"></i>${opInfo.label}</h6>
+            <div class="info-section-content">
+                ${auditData.DashboardName ? `
+                <div class="json-item">
+                    <span class="json-key">Dashboard:</span>
+                    <span class="json-value"><strong>${auditData.DashboardName}</strong></span>
+                </div>` : ''}
+                ${auditData.ReportName ? `
+                <div class="json-item">
+                    <span class="json-key">Rapport:</span>
+                    <span class="json-value"><strong>${auditData.ReportName}</strong></span>
+                </div>` : ''}
+                ${auditData.DatasetName ? `
+                <div class="json-item">
+                    <span class="json-key">Dataset:</span>
+                    <span class="json-value">${auditData.DatasetName}</span>
+                </div>` : ''}
+                ${auditData.WorkspaceName ? `
+                <div class="json-item">
+                    <span class="json-key">Workspace:</span>
+                    <span class="json-value"><span class="badge bg-secondary">${auditData.WorkspaceName}</span></span>
+                </div>` : ''}
+                ${auditData.ObjectId ? `
+                <div class="json-item">
+                    <span class="json-key">Objet:</span>
+                    <span class="json-value"><code>${auditData.ObjectId}</code></span>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
 }
 
 // Fonction spécifique pour afficher les détails des règles
@@ -1781,68 +3088,194 @@ function renderGenericOperationDetails(operation, auditData) {
     `;
 }
 
-// Onglet Folders - Afficher les dossiers et items
+// Onglet Folders - Afficher les dossiers et items (adapté selon le workload)
 function renderFoldersTab(auditData) {
-    if (!auditData.Folders || auditData.Folders.length === 0) {
-        document.getElementById('folders-container').innerHTML = '<div class="alert alert-info">Aucun dossier dans ce log</div>';
+    const workload = auditData.Workload || '';
+    const container = document.getElementById('folders-container');
+    
+    // === EXCHANGE: Afficher les dossiers mail ===
+    if (workload === 'Exchange' || (auditData.Folders && auditData.Folders.length > 0)) {
+        if (!auditData.Folders || auditData.Folders.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">Aucun dossier mail dans ce log</div>';
+            return;
+        }
+        let foldersHtml = '';
+        auditData.Folders.forEach((folder, idx) => {
+            foldersHtml += `
+                <div class="info-section">
+                    <h6 class="info-section-title">Dossier: ${folder.Path || 'N/A'}</h6>
+                    <div class="info-section-content">
+                        ${folder.FolderItems ? folder.FolderItems.map((item, itemIdx) => `
+                            <div class="json-item" style="margin-bottom: 15px; border-left: 3px solid #6c757d;">
+                                <div><span class="json-key">Sujet:</span> <span class="json-value">${item.Subject || 'N/A'}</span></div>
+                                <div><span class="json-key">Taille:</span> <span class="json-value">${item.SizeInBytes ? formatBytes(item.SizeInBytes) : 'N/A'}</span></div>
+                                <div><span class="json-key">Date Création:</span> <span class="json-value">${formatDate(item.CreationTime)}</span></div>
+                                <div><span class="json-key">InternetMessageId:</span> <span class="json-value" style="font-size: 0.8rem;">${item.InternetMessageId || '-'}</span></div>
+                            </div>
+                        `).join('') : '<div class="alert alert-sm alert-info m-0">Aucun item</div>'}
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = foldersHtml;
         return;
     }
-
-    let foldersHtml = '';
-    auditData.Folders.forEach((folder, idx) => {
-        foldersHtml += `
+    
+    // === SHAREPOINT / ONEDRIVE: Afficher les infos fichier/dossier ===
+    if (workload === 'SharePoint' || workload === 'OneDrive') {
+        let fileHtml = `
             <div class="info-section">
-                <h6 class="info-section-title">Dossier: ${folder.Path || 'N/A'}</h6>
+                <h6 class="info-section-title"><i class="fas fa-folder-open me-2 text-success"></i>Détails Fichier / Dossier</h6>
                 <div class="info-section-content">
-                    ${folder.FolderItems ? folder.FolderItems.map((item, itemIdx) => `
-                        <div class="json-item" style="margin-bottom: 15px; border-left: 3px solid #6c757d;">
-                            <div><span class="json-key">Sujet:</span> <span class="json-value">${item.Subject || 'N/A'}</span></div>
-                            <div><span class="json-key">Taille:</span> <span class="json-value">${item.SizeInBytes ? formatBytes(item.SizeInBytes) : 'N/A'}</span></div>
-                            <div><span class="json-key">Date Création:</span> <span class="json-value">${formatDate(item.CreationTime)}</span></div>
-                            <div><span class="json-key">InternetMessageId:</span> <span class="json-value" style="font-size: 0.8rem;">${item.InternetMessageId || '-'}</span></div>
-                        </div>
-                    `).join('') : '<div class="alert alert-sm alert-info m-0">Aucun item</div>'}
+                    ${auditData.SourceFileName ? `
+                    <div class="json-item">
+                        <span class="json-key">Nom:</span>
+                        <span class="json-value"><strong>${auditData.SourceFileName}</strong></span>
+                    </div>` : ''}
+                    ${auditData.SourceRelativeUrl ? `
+                    <div class="json-item">
+                        <span class="json-key">Chemin Source:</span>
+                        <span class="json-value"><code>${auditData.SourceRelativeUrl}</code></span>
+                    </div>` : ''}
+                    ${auditData.DestinationFileName ? `
+                    <div class="json-item">
+                        <span class="json-key">Nom Destination:</span>
+                        <span class="json-value"><strong>${auditData.DestinationFileName}</strong></span>
+                    </div>` : ''}
+                    ${auditData.DestinationRelativeUrl ? `
+                    <div class="json-item">
+                        <span class="json-key">Chemin Destination:</span>
+                        <span class="json-value"><code>${auditData.DestinationRelativeUrl}</code></span>
+                    </div>` : ''}
+                    ${auditData.ItemType ? `
+                    <div class="json-item">
+                        <span class="json-key">Type:</span>
+                        <span class="json-value"><span class="badge bg-secondary">${auditData.ItemType}</span></span>
+                    </div>` : ''}
+                    ${auditData.SiteUrl ? `
+                    <div class="json-item">
+                        <span class="json-key">Site:</span>
+                        <span class="json-value"><a href="${auditData.SiteUrl}" target="_blank">${auditData.SiteUrl}</a></span>
+                    </div>` : ''}
+                    ${auditData.ObjectId ? `
+                    <div class="json-item">
+                        <span class="json-key">URL Complète:</span>
+                        <span class="json-value"><small><code>${auditData.ObjectId}</code></small></span>
+                    </div>` : ''}
                 </div>
             </div>
         `;
-    });
+        container.innerHTML = fileHtml;
+        return;
+    }
     
-    document.getElementById('folders-container').innerHTML = foldersHtml;
+    // === ENTRA ID: Afficher les propriétés modifiées ===
+    if (workload === 'AzureActiveDirectory') {
+        if (!auditData.ModifiedProperties || auditData.ModifiedProperties.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">Aucune propriété modifiée dans ce log</div>';
+            return;
+        }
+        container.innerHTML = renderEntraModifiedPropertiesSection(auditData);
+        return;
+    }
+    
+    // === DÉFAUT ===
+    container.innerHTML = '<div class="alert alert-info">Aucun dossier dans ce log</div>';
 }
 
-// Onglet Items - Afficher les AffectedItems
+// Onglet Items - Afficher les éléments selon le workload
 function renderItemsTab(auditData) {
+    const workload = auditData.Workload || '';
     let itemsHtml = '';
     
-    // AffectedItems (SoftDelete, HardDelete, etc.)
-    if (auditData.AffectedItems && auditData.AffectedItems.length > 0) {
+    // === EXCHANGE: AffectedItems et Item ===
+    if (workload === 'Exchange' || auditData.AffectedItems || auditData.Item) {
+        // AffectedItems (SoftDelete, HardDelete, etc.)
+        if (auditData.AffectedItems && auditData.AffectedItems.length > 0) {
+            itemsHtml += `
+                <div class="info-section">
+                    <h6 class="info-section-title"><i class="fas fa-envelope me-2 text-danger"></i>Éléments Affectés (${auditData.AffectedItems.length})</h6>
+                    <div class="info-section-content">
+                        ${auditData.AffectedItems.map((item, idx) => `
+                            <div class="json-item" style="border-left: 3px solid #dc3545;">
+                                <div><span class="json-key">Sujet:</span> <span class="json-value">${item.Subject || 'N/A'}</span></div>
+                                <div><span class="json-key">Dossier Parent:</span> <span class="json-value">${item.ParentFolder?.Path || 'N/A'}</span></div>
+                                <div><span class="json-key">Pièces jointes:</span> <span class="json-value">${item.Attachments || 'Aucune'}</span></div>
+                                <div><span class="json-key">InternetMessageId:</span> <span class="json-value" style="font-size: 0.8rem;">${item.InternetMessageId || '-'}</span></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Item (pour Send, etc.)
+        if (auditData.Item) {
+            itemsHtml += `
+                <div class="info-section">
+                    <h6 class="info-section-title"><i class="fas fa-envelope-open-text me-2 text-primary"></i>Détails Item</h6>
+                    <div class="info-section-content">
+                        <div><span class="json-key">Sujet:</span> <span class="json-value">${auditData.Item.Subject || 'N/A'}</span></div>
+                        <div><span class="json-key">Taille:</span> <span class="json-value">${formatBytes(auditData.Item.SizeInBytes)}</span></div>
+                        <div><span class="json-key">Dossier Parent:</span> <span class="json-value">${auditData.Item.ParentFolder?.Path || 'N/A'}</span></div>
+                        <div><span class="json-key">Pièces jointes:</span> <span class="json-value">${auditData.Item.Attachments || 'Aucune'}</span></div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    // === SHAREPOINT / ONEDRIVE: Détails de fichier ===
+    if (workload === 'SharePoint' || workload === 'OneDrive') {
         itemsHtml += `
             <div class="info-section">
-                <h6 class="info-section-title">Éléments Affectés (${auditData.AffectedItems.length})</h6>
+                <h6 class="info-section-title"><i class="fas fa-file-alt me-2 text-success"></i>Détails du Fichier</h6>
                 <div class="info-section-content">
-                    ${auditData.AffectedItems.map((item, idx) => `
-                        <div class="json-item" style="border-left: 3px solid #dc3545;">
-                            <div><span class="json-key">Sujet:</span> <span class="json-value">${item.Subject || 'N/A'}</span></div>
-                            <div><span class="json-key">Dossier Parent:</span> <span class="json-value">${item.ParentFolder?.Path || 'N/A'}</span></div>
-                            <div><span class="json-key">Pièces jointes:</span> <span class="json-value">${item.Attachments || 'Aucune'}</span></div>
-                            <div><span class="json-key">InternetMessageId:</span> <span class="json-value" style="font-size: 0.8rem;">${item.InternetMessageId || '-'}</span></div>
-                        </div>
-                    `).join('')}
+                    ${auditData.SourceFileName ? `<div class="json-item"><span class="json-key">Nom:</span> <span class="json-value"><strong>${auditData.SourceFileName}</strong></span></div>` : ''}
+                    ${auditData.SourceFileExtension ? `<div class="json-item"><span class="json-key">Extension:</span> <span class="json-value"><span class="badge bg-dark">${auditData.SourceFileExtension}</span></span></div>` : ''}
+                    ${auditData.FileSizeBytes ? `<div class="json-item"><span class="json-key">Taille:</span> <span class="json-value">${formatBytes(auditData.FileSizeBytes)}</span></div>` : ''}
+                    ${auditData.ItemType ? `<div class="json-item"><span class="json-key">Type:</span> <span class="json-value">${auditData.ItemType}</span></div>` : ''}
+                    ${auditData.ListItemUniqueId ? `<div class="json-item"><span class="json-key">ID Unique:</span> <span class="json-value"><small class="font-monospace">${auditData.ListItemUniqueId}</small></span></div>` : ''}
+                    ${auditData.ObjectId ? `<div class="json-item"><span class="json-key">URL:</span> <span class="json-value"><small><code>${auditData.ObjectId}</code></small></span></div>` : ''}
                 </div>
             </div>
         `;
     }
-
-    // Item (pour Send, etc.)
-    if (auditData.Item) {
+    
+    // === ENTRA ID: Afficher les cibles (Target) ===
+    if (workload === 'AzureActiveDirectory' && auditData.Target && auditData.Target.length > 0) {
         itemsHtml += `
             <div class="info-section">
-                <h6 class="info-section-title">Détails Item</h6>
+                <h6 class="info-section-title"><i class="fas fa-crosshairs me-2 text-warning"></i>Objets Cibles</h6>
                 <div class="info-section-content">
-                    <div><span class="json-key">Sujet:</span> <span class="json-value">${auditData.Item.Subject || 'N/A'}</span></div>
-                    <div><span class="json-key">Taille:</span> <span class="json-value">${formatBytes(auditData.Item.SizeInBytes)}</span></div>
-                    <div><span class="json-key">Dossier Parent:</span> <span class="json-value">${auditData.Item.ParentFolder?.Path || 'N/A'}</span></div>
-                    <div><span class="json-key">Pièces jointes:</span> <span class="json-value">${auditData.Item.Attachments || 'Aucune'}</span></div>
+                    ${auditData.Target.map(target => {
+                        const typeLabels = {
+                            0: 'UPN', 1: 'ID Application', 2: 'Nom', 3: 'ObjectId', 
+                            4: 'ID Appareil', 5: 'Rôle', 6: 'Nom Rôle', 8: 'Domaine',
+                            10: 'Groupe'
+                        };
+                        const typeLabel = typeLabels[target.Type] || 'Type ' + target.Type;
+                        return `
+                        <div class="json-item" style="border-left: 3px solid #ffc107;">
+                            <span class="json-key">${typeLabel}:</span>
+                            <span class="json-value"><small>${target.ID || '-'}</small></span>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    // === TEAMS: Détails d'équipe/canal ===
+    if (workload === 'MicrosoftTeams') {
+        itemsHtml += `
+            <div class="info-section">
+                <h6 class="info-section-title"><i class="fas fa-comments me-2"></i>Détails Teams</h6>
+                <div class="info-section-content">
+                    ${auditData.TeamName ? `<div class="json-item"><span class="json-key">Équipe:</span> <span class="json-value"><strong>${auditData.TeamName}</strong></span></div>` : ''}
+                    ${auditData.ChannelName ? `<div class="json-item"><span class="json-key">Canal:</span> <span class="json-value"># ${auditData.ChannelName}</span></div>` : ''}
+                    ${auditData.TeamGuid ? `<div class="json-item"><span class="json-key">ID Équipe:</span> <span class="json-value"><small class="font-monospace">${auditData.TeamGuid}</small></span></div>` : ''}
+                    ${auditData.CommunicationType ? `<div class="json-item"><span class="json-key">Type Communication:</span> <span class="json-value">${auditData.CommunicationType}</span></div>` : ''}
                 </div>
             </div>
         `;
@@ -2469,21 +3902,25 @@ function resetAnalysis() {
     analysisData = {};
 
     // Reset form
-    uploadForm.reset();
-    document.getElementById('csv-check').style.display = 'none';
-    document.getElementById('usermap-check').style.display = 'none';
-    document.getElementById('file-info').style.display = 'none';
-    document.getElementById('upload-error').style.display = 'none';
+    if (uploadForm) uploadForm.reset();
+    const csvCheck = document.getElementById('csv-check');
+    const usermapCheck = document.getElementById('usermap-check');
+    const fileInfo = document.getElementById('file-info');
+    const uploadError = document.getElementById('upload-error');
+    if (csvCheck) csvCheck.style.display = 'none';
+    if (usermapCheck) usermapCheck.style.display = 'none';
+    if (fileInfo) fileInfo.style.display = 'none';
+    if (uploadError) uploadError.style.display = 'none';
 
     // Show upload section
-    uploadSection.style.display = 'block';
-    dashboardSection.style.display = 'none';
+    if (uploadSection) uploadSection.style.display = 'block';
+    if (dashboardSection) dashboardSection.style.display = 'none';
 
     // Reset navbar
-    navbarStatus.textContent = 'Bienvenue';
+    if (navbarStatus) navbarStatus.textContent = 'Bienvenue';
 
     // Reset file inputs
-    csvFileInput.value = '';
+    if (csvFileInput) csvFileInput.value = '';
 }
 
 function formatDate(dateString) {
