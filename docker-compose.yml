@@ -5,8 +5,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: purrrr-redis
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     volumes:
       - redis_data:/data
     command: >
@@ -32,7 +32,7 @@ services:
       dockerfile: Dockerfile
     container_name: purrrr-web
     ports:
-      - "5000:5000"
+      - "5050:5000"
     environment:
       - FLASK_ENV=development
       - DEBUG=1
